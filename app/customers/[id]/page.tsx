@@ -179,7 +179,7 @@ export default function CustomerDetailPage() {
               </div>
 
               <div className="mt-4 rounded-2xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-4">
-                <UsageSparkline values={customer.usageTrend} />
+                <UsageSparkline values={customer.usageTrend || []} />
                 <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
                   <span>12w ago</span>
                   <span>Today</span>
@@ -449,7 +449,7 @@ function MetricBar({
   );
 }
 
-function UsageSparkline({ values }: { values: number[] }) {
+function UsageSparkline({ values = [] }: { values?: number[] }) {
   const safe = values.length >= 2 ? values : [0, 0];
   const max = Math.max(...safe, 1);
   const min = Math.min(...safe, 0);
