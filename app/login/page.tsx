@@ -3,29 +3,75 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { login, signUp } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<"login" | "signup">("login");
 
-  function handleSubmit(e: React.FormEvent) {
+  // Login state
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Signup state
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupConfirm, setSignupConfirm] = useState("");
+  const [signupError, setSignupError] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
+
+  function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-
-    if (!email || !password) {
-      setError("Please enter your email and password.");
+    setLoginError("");
+    if (!loginEmail || !loginPassword) {
+      setLoginError("Please enter your email and password.");
       return;
     }
-
-    setLoading(true);
-    // Simulate a short delay then redirect to dashboard (no real auth)
+    setLoginLoading(true);
     setTimeout(() => {
-      setLoading(false);
+      const result = login(loginEmail, loginPassword);
+      setLoginLoading(false);
+      if (!result.ok) {
+        setLoginError(result.error ?? "Login failed.");
+        return;
+      }
+      // Owner goes to admin, others go to dashboard
+      if (loginEmail.toLowerCase() === "rpm6105@gmail.com") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
+    }, 600);
+  }
+
+  function handleSignup(e: React.FormEvent) {
+    e.preventDefault();
+    setSignupError("");
+    if (!signupName || !signupEmail || !signupPassword || !signupConfirm) {
+      setSignupError("Please fill in all fields.");
+      return;
+    }
+    if (signupPassword !== signupConfirm) {
+      setSignupError("Passwords do not match.");
+      return;
+    }
+    if (signupPassword.length < 6) {
+      setSignupError("Password must be at least 6 characters.");
+      return;
+    }
+    setSignupLoading(true);
+    setTimeout(() => {
+      const result = signUp(signupName, signupEmail, signupPassword);
+      setSignupLoading(false);
+      if (!result.ok) {
+        setSignupError(result.error ?? "Sign up failed.");
+        return;
+      }
       router.push("/dashboard");
-    }, 800);
+    }, 600);
   }
 
   return (
@@ -44,75 +90,172 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white shadow-sm shadow-slate-900/5 dark:border-white/10 dark:bg-white/5">
-          <div className="border-b border-gray-200 px-5 py-4 dark:border-white/10">
-            <div className="text-sm font-semibold text-gray-900 dark:text-white">Sign in to your account</div>
-            <div className="mt-0.5 text-xs text-gray-600 dark:text-white/60">
-              Enter your credentials to access the dashboard.
-            </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 dark:border-white/10">
+            <button
+              onClick={() => { setTab("login"); setLoginError(""); }}
+              className={`flex-1 px-5 py-4 text-sm font-semibold transition ${tab === "login" ? "border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400" : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"}`}
+            >
+              Sign in
+            </button>
+            <button
+              onClick={() => { setTab("signup"); setSignupError(""); }}
+              className={`flex-1 px-5 py-4 text-sm font-semibold transition ${tab === "signup" ? "border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400" : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"}`}
+            >
+              Create account
+            </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 p-5">
-            {/* Email */}
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-xs font-semibold text-gray-700 dark:text-white/70">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
-              />
-            </div>
-
-            {/* Password */}
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-xs font-semibold text-gray-700 dark:text-white/70">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
-              />
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
-                {error}
+          {/* Login Form */}
+          {tab === "login" && (
+            <form onSubmit={handleLogin} className="space-y-4 p-5">
+              <div className="space-y-1.5">
+                <label htmlFor="login-email" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Email address
+                </label>
+                <input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
               </div>
-            )}
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20 disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z" />
-                  </svg>
-                  Signing in…
-                </>
-              ) : (
-                "Sign in"
+              <div className="space-y-1.5">
+                <label htmlFor="login-password" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Password
+                </label>
+                <input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
+              </div>
+
+              {loginError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
+                  {loginError}
+                </div>
               )}
-            </button>
-          </form>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20 disabled:opacity-60"
+              >
+                {loginLoading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z" />
+                    </svg>
+                    Signing in…
+                  </>
+                ) : "Sign in"}
+              </button>
+            </form>
+          )}
+
+          {/* Signup Form */}
+          {tab === "signup" && (
+            <form onSubmit={handleSignup} className="space-y-4 p-5">
+              <div className="space-y-1.5">
+                <label htmlFor="signup-name" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Full name
+                </label>
+                <input
+                  id="signup-name"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Jane Smith"
+                  value={signupName}
+                  onChange={(e) => setSignupName(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="signup-email" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Email address
+                </label>
+                <input
+                  id="signup-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="signup-password" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Password
+                </label>
+                <input
+                  id="signup-password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Min. 6 characters"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="signup-confirm" className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                  Confirm password
+                </label>
+                <input
+                  id="signup-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  value={signupConfirm}
+                  onChange={(e) => setSignupConfirm(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/20"
+                />
+              </div>
+
+              {signupError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
+                  {signupError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={signupLoading}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20 disabled:opacity-60"
+              >
+                {signupLoading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z" />
+                    </svg>
+                    Creating account…
+                  </>
+                ) : "Create account"}
+              </button>
+
+              <p className="text-center text-xs text-gray-500 dark:text-white/40">
+                By signing up you agree to our terms of service.
+              </p>
+            </form>
+          )}
         </div>
 
-        {/* Back to landing */}
         <div className="mt-5 text-center">
           <Link
             href="/"
