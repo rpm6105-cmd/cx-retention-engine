@@ -1,7 +1,7 @@
 "use client";
 
-import { useLocalStorageState } from "@/lib/useLocalStorageState";
-import { STORAGE_KEYS } from "@/lib/storageKeys";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export type Priority = "High" | "Medium" | "Low";
 export type Status = "Open" | "In Progress" | "Done";
@@ -13,7 +13,7 @@ export type Task = {
   customerId: string;
   customerName: string;
   priority: Priority;
-  dueDate: string; // YYYY-MM-DD
+  dueDate: string;
   status: Status;
 };
 
@@ -50,7 +50,56 @@ const DEFAULT_TASKS: Task[] = [
   },
 ];
 
-export function useTasks() {
-  return useLocalStorageState<Task[]>(STORAGE_KEYS.tasks, DEFAULT_TASKS);
-}
+export function useTasks(): [Task[], React.Dispatch<React.SetStateAction<Task[]>>] {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) setUserId(session.user.id);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    async function load() {
+      const { data } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true });
+
+      if (!data || data.length === 0) {
+        // Seed default tasks for new users
+        const toInsert = DEFAULT_TASKS.map((t) => ({
+          id: t.id,
+          user_id: userId,
+          customer_id: t.customerId,
+          title: t.title,
+          due: t.dueDate,
+          status: t.status,
+        }));
+        await supabase.from("tasks").insert(toInsert);
+        setTasks(DEFAULT_TASKS);
+      } else {
+        setTasks(
+          data.map((r) => ({
+            id: r.id,
+            title: r.title,
+            description: "",
+            customerId: r.customer_id ?? "",
+            customerName: "",
+            priority: "Medium" as Priority,
+            dueDate: r.due,
+            status: r.status as Status,
+          })),
+        );
+      }
+    }
+
+    load();
+  }, [userId]);
+
+  return [tasks, setTasks];
+}
