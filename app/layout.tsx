@@ -1,6 +1,7 @@
 import Sidebar from "@/components/Sidebar";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,6 +31,7 @@ export default function RootLayout({
       >
         <Sidebar />
         <main className="flex-1 p-6 lg:p-8">{children}</main>
+        <SpeedInsights />
       </body>
     </html>
   );
