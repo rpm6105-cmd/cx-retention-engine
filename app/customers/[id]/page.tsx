@@ -195,7 +195,8 @@ export default function CustomerDetailPage() {
               </div>
 
               <div className="mt-4 rounded-2xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-4">
-                <UsageSparkline values={customer.usageTrend || []} />
+                {/* ✅ ONLY CHANGE: added ?? [] to fix "number[] | undefined" type error */}
+                <UsageSparkline values={customer.usageTrend ?? []} />
                 <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
                   <span>12w ago</span>
                   <span>Today</span>
@@ -361,9 +362,9 @@ export default function CustomerDetailPage() {
                     onClick={() => {
                       const status =
                         riskLevel === "High"
-                          ? "we’re concerned about recent signals"
+                          ? "we're concerned about recent signals"
                           : riskLevel === "Medium"
-                            ? "we’ve noticed a few signals worth addressing"
+                            ? "we've noticed a few signals worth addressing"
                             : "things are looking strong";
                       const suggested =
                         riskLevel === "High"
@@ -385,7 +386,7 @@ export default function CustomerDetailPage() {
                           `I wanted to reach out because ${status}. Your current health score is ${healthScore} (${risk}).`,
                           issuesLine,
                           "",
-                          `Next step: Let’s ${suggested}.`,
+                          `Next step: Let's ${suggested}.`,
                           "",
                           "Thanks,",
                           "Customer Success",
@@ -641,6 +642,3 @@ function indicatorsForRisk(riskLevel: "High" | "Medium" | "Low") {
     },
   ];
 }
-
- 
-
