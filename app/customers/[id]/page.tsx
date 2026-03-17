@@ -15,7 +15,7 @@ export default function CustomerDetailPage() {
 
   const [customers] = useCustomers();
   const base = useMemo(() => customers.find((c) => c.id === id), [customers, id]);
-  const customer = base ?? {
+  const customer = (base ?? {
     id,
     name: `Customer ${id}`,
     plan: "Starter" as const,
@@ -29,6 +29,22 @@ export default function CustomerDetailPage() {
       { id: "T-NEW-1", title: "Intro call", due: "Fri", status: "Open" as const },
       { id: "T-NEW-2", title: "Send onboarding checklist", due: "Mon", status: "Open" as const },
     ],
+  }) as {
+    id: string;
+    name: string;
+    plan: "Starter" | "Pro" | "Business";
+    mrr: number;
+    lastActivity: string;
+    logins_last_30_days: number;
+    support_tickets: number;
+    plan_value: number;
+    usageTrend: number[];
+    tasks: {
+      id: string;
+      title: string;
+      due: string;
+      status: "Open" | "Done";
+    }[];
   };
 
   const arr = customer.mrr * 12;
