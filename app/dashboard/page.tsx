@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePlan } from "@/lib/usePlan";
 import { useRouter } from "next/navigation";
 import { calculateHealth, riskFlag } from "@/lib/healthScore";
 import { useCustomers } from "@/lib/useCustomers";
@@ -11,6 +12,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { canExport } = usePlan();
   const [customers] = useCustomers();
   const [assignments, setAssignments] = useAssignments();
 
@@ -164,9 +166,20 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm">
-                Export
-              </Button>
+              {canExport ? (
+                <Button variant="secondary" size="sm">
+                  Export
+                </Button>
+              ) : (
+                <div className="group relative">
+                  <Button variant="secondary" size="sm" disabled className="cursor-not-allowed opacity-50">
+                    Export
+                  </Button>
+                  <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-lg opacity-0 transition group-hover:opacity-100">
+                    Upgrade to Pro to export
+                  </div>
+                </div>
+              )}
               <Button variant="secondary" size="sm">
                 Filters
               </Button>
@@ -524,4 +537,3 @@ function escapeCsv(value: string) {
   if (/[",\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`;
   return value;
 }
-
