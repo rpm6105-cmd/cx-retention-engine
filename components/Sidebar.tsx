@@ -87,15 +87,25 @@ export default function Sidebar() {
         <div className="mt-2 text-xs text-white/60">Monitor risk, prioritize follow-ups, drive retention.</div>
       </div>
 
+      {/* User card with profile link and logout */}
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/20 text-xs font-semibold text-indigo-200">
+          <Link
+            href="/profile"
+            onClick={() => setMobileOpen(false)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/20 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/30"
+            title="View profile"
+          >
             {userName ? userName.split(" ").slice(0, 2).map((p) => p[0]).join("") : "?"}
-          </div>
-          <div className="min-w-0 flex-1">
+          </Link>
+          <Link
+            href="/profile"
+            onClick={() => setMobileOpen(false)}
+            className="min-w-0 flex-1 hover:opacity-80 transition"
+          >
             <div className="truncate text-xs font-semibold text-white">{userName || "User"}</div>
             <div className="truncate text-xs text-white/50">{userPlan}</div>
-          </div>
+          </Link>
           <button
             onClick={handleLogout}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -144,18 +154,7 @@ export default function Sidebar() {
   );
 }
 
-function DashboardIcon() {
-  return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M3 10a7 7 0 1 1 14 0v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm7-4a.75.75 0 0 1 .75.75V10a.75.75 0 0 1-1.5 0V6.75A.75.75 0 0 1 10 6Z" /></svg>;
-}
-
-function UsersIcon() {
-  return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M10 9a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm6.5 9a.75.75 0 0 1-.75-.75 4.75 4.75 0 0 0-9.5 0 .75.75 0 0 1-1.5 0 6.25 6.25 0 0 1 12.5 0 .75.75 0 0 1-.75.75Z" /></svg>;
-}
-
-function CheckIcon() {
-  return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M16.704 5.296a1 1 0 0 1 0 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3A1 1 0 0 1 6.704 9.296l2.293 2.293 6.293-6.293a1 1 0 0 1 1.414 0Z" clipRule="evenodd" /></svg>;
-}
-
-function BellIcon() {
-  return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M10 18a2 2 0 0 0 2-2H8a2 2 0 0 0 2 2Zm6-5.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1c0-.6.4-1.1 1-1.4V9a5 5 0 1 1 10 0v2.1c.6.3 1 .8 1 1.4Z" /></svg>;
-}
+function DashboardIcon() { return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M3 10a7 7 0 1 1 14 0v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm7-4a.75.75 0 0 1 .75.75V10a.75.75 0 0 1-1.5 0V6.75A.75.75 0 0 1 10 6Z" /></svg>; }
+function UsersIcon() { return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M10 9a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm6.5 9a.75.75 0 0 1-.75-.75 4.75 4.75 0 0 0-9.5 0 .75.75 0 0 1-1.5 0 6.25 6.25 0 0 1 12.5 0 .75.75 0 0 1-.75.75Z" /></svg>; }
+function CheckIcon() { return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M16.704 5.296a1 1 0 0 1 0 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3A1 1 0 0 1 6.704 9.296l2.293 2.293 6.293-6.293a1 1 0 0 1 1.414 0Z" clipRule="evenodd" /></svg>; }
+function BellIcon() { return <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M10 18a2 2 0 0 0 2-2H8a2 2 0 0 0 2 2Zm6-5.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1c0-.6.4-1.1 1-1.4V9a5 5 0 1 1 10 0v2.1c.6.3 1 .8 1 1.4Z" /></svg>; }
