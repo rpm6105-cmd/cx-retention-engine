@@ -18,17 +18,22 @@ export default function AdminPage() {
   const [selectedPlan, setSelectedPlan] = useState<Plan>("Starter");
   const [loading, setLoading] = useState(true);
 
+  // Invite modal state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePlan, setInvitePlan] = useState<Plan>("Starter");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-
-      // Double check — only owner email allowed
       if (session.user.email !== "rpm6105@gmail.com") {
         const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
         if (!profile?.is_owner) { router.replace("/dashboard"); return; }
       }
-
       const all = await getAllUsers();
       setUsers(all);
       setLoading(false);
@@ -41,6 +46,36 @@ export default function AdminPage() {
     await assignPlan(assigningUser.email, selectedPlan);
     setUsers((prev) => prev.map((u) => u.email === assigningUser.email ? { ...u, plan: selectedPlan } : u));
     setAssigningUser(null);
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteError("");
+    setInviteSuccess(false);
+    if (!inviteEmail) { setInviteError("Please enter an email address."); return; }
+    setInviteLoading(true);
+
+    const { error } = await supabase.auth.admin.inviteUserByEmail(inviteEmail, {
+      data: { plan: invitePlan },
+      redirectTo: "https://cx-retention-engine.vercel.app/dashboard",
+    });
+
+    setInviteLoading(false);
+
+    if (error) {
+      // inviteUserByEmail requires service_role key — fall back to a helpful message
+      setInviteError(
+        "Direct invite requires a server-side API key. To invite users, share this link: https://cx-retention-engine.vercel.app/login — then assign their plan from this dashboard once they sign up.",
+      );
+      return;
+    }
+
+    setInviteSuccess(true);
+    setInviteEmail("");
+
+    // Refresh users list
+    const all = await getAllUsers();
+    setUsers(all);
   }
 
   async function handleLogout() {
@@ -92,6 +127,13 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <Badge tone="success">Owner</Badge>
+              <Button variant="primary" onClick={() => { setInviteOpen(true); setInviteSuccess(false); setInviteError(""); }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
+                  <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
+                </svg>
+                Invite user
+              </Button>
               <Button variant="secondary" onClick={handleLogout}>
                 <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                   <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" />
@@ -182,7 +224,87 @@ export default function AdminPage() {
         </Card>
       </div>
 
-      {/* Assign Plan Modal */}
+      {/* ── Invite User Modal ── */}
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setInviteOpen(false); }}>
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-lg shadow-slate-900/15">
+            <div className="border-b border-gray-200 p-4 sm:p-5">
+              <div className="text-sm font-semibold text-gray-900">Invite user</div>
+              <div className="mt-0.5 text-xs text-gray-600">Send an invite link to a new user.</div>
+            </div>
+
+            {inviteSuccess ? (
+              <div className="p-6 text-center">
+                <div className="grid h-12 w-12 mx-auto place-items-center rounded-full bg-emerald-100 text-emerald-600">
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6"><path fillRule="evenodd" d="M16.704 4.296a1 1 0 0 1 0 1.414l-7.5 7.5a1 1 0 0 1-1.414 0l-3.5-3.5a1 1 0 0 1 1.414-1.414l2.793 2.793 6.793-6.793a1 1 0 0 1 1.414 0Z" clipRule="evenodd" /></svg>
+                </div>
+                <div className="mt-3 text-sm font-semibold text-gray-900">Invite sent!</div>
+                <div className="mt-1 text-xs text-gray-500">The user will receive an email with a link to join.</div>
+                <button onClick={() => { setInviteOpen(false); setInviteSuccess(false); }} className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700">
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleInvite} className="space-y-4 p-4 sm:p-5">
+                <div className="space-y-1.5">
+                  <label htmlFor="invite-email" className="text-xs font-semibold text-gray-700">Email address</label>
+                  <input
+                    id="invite-email"
+                    type="email"
+                    placeholder="user@company.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="invite-plan" className="text-xs font-semibold text-gray-700">Assign plan</label>
+                  <select
+                    id="invite-plan"
+                    value={invitePlan}
+                    onChange={(e) => setInvitePlan(e.target.value as Plan)}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15"
+                  >
+                    {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+
+                {/* Share link fallback */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-1.5">Or share signup link directly</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded-lg bg-white border border-gray-200 px-2 py-1.5 text-xs text-gray-700">
+                      https://cx-retention-engine.vercel.app/login
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText("https://cx-retention-engine.vercel.app/login")}
+                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                {inviteError && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                    {inviteError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button variant="secondary" type="button" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                  <Button variant="primary" type="submit" disabled={inviteLoading}>
+                    {inviteLoading ? "Sending…" : "Send invite"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Assign Plan Modal ── */}
       {assigningUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setAssigningUser(null); }}>
           <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-lg shadow-slate-900/15">
