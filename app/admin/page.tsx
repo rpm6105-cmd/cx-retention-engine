@@ -22,8 +22,13 @@ export default function AdminPage() {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-      const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
-      if (!profile?.is_owner) { router.replace("/dashboard"); return; }
+
+      // Double check — only owner email allowed
+      if (session.user.email !== "rpm6105@gmail.com") {
+        const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
+        if (!profile?.is_owner) { router.replace("/dashboard"); return; }
+      }
+
       const all = await getAllUsers();
       setUsers(all);
       setLoading(false);
@@ -44,9 +49,7 @@ export default function AdminPage() {
   }
 
   const filtered = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()),
+    (u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()),
   );
 
   const totalUsers = users.length;
@@ -74,6 +77,8 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
       <div className="mx-auto max-w-6xl space-y-6 px-1 py-2 sm:px-3 sm:py-6">
+
+        {/* Header */}
         <header className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">
@@ -87,11 +92,18 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <Badge tone="success">Owner</Badge>
-              <Button variant="secondary" onClick={handleLogout}>Sign out</Button>
+              <Button variant="secondary" onClick={handleLogout}>
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-.943a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 1 1-1.004-1.114l1.048-.943H6.75A.75.75 0 0 1 6 10Z" clipRule="evenodd" />
+                </svg>
+                Sign out
+              </Button>
             </div>
           </div>
         </header>
 
+        {/* KPI Cards */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
             { label: "Total users", value: totalUsers },
@@ -106,6 +118,7 @@ export default function AdminPage() {
           ))}
         </section>
 
+        {/* Users Table */}
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-3 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -169,6 +182,7 @@ export default function AdminPage() {
         </Card>
       </div>
 
+      {/* Assign Plan Modal */}
       {assigningUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setAssigningUser(null); }}>
           <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-lg shadow-slate-900/15">
