@@ -49,53 +49,48 @@ export default function DashboardPage() {
   const healthy = lowRisk;
 
   // ── CSV template download ──────────────────────────────────────────────────
-  function downloadTemplate() {
-    const headers = [
-      "id",
-      "name",
-      "plan",
-      "mrr",
-      "last_activity",
-      "logins_last_30_days",
-      "support_tickets",
-      "plan_value",
-    ];
-    const example = [
-      "CUST-0001",
-      "Acme Corp",
-      "Pro",
-      "1299",
-      "2d ago",
-      "22",
-      "1",
-      "1299",
-    ];
-    const instructions = [
-      "# Instructions:",
-      "# id: unique customer ID (e.g. CUST-0001)",
-      "# name: company or customer name",
-      "# plan: Starter | Pro | Business",
-      "# mrr: monthly recurring revenue in USD (number only)",
-      "# last_activity: e.g. 'Today', '2d ago', '7d ago'",
-      "# logins_last_30_days: number of logins in last 30 days",
-      "# support_tickets: number of open support tickets",
-      "# plan_value: same as mrr unless different pricing",
-      "#",
-      "# DELETE these instruction rows before uploading",
-    ];
-    const csv = [
-      ...instructions,
-      headers.join(","),
-      example.join(","),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "cx-customers-template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+ function downloadTemplate() {
+  // Clean header row
+  const headers = [
+    "id",
+    "name",
+    "plan",
+    "mrr",
+    "last_activity",
+    "logins_last_30_days",
+    "support_tickets",
+    "plan_value",
+  ];
+ 
+  // Two clean example rows so users understand the format
+  const examples = [
+    ["CUST-0001", "Acme Corp", "Pro", "1299", "2d ago", "22", "1", "1299"],
+    ["CUST-0002", "Northwind Ltd", "Starter", "499", "Today", "15", "0", "499"],
+  ];
+ 
+  const rows = [headers, ...examples]
+    .map((row) => row.map((cell) => {
+      // Wrap in quotes if contains comma or space
+      return cell.includes(",") || cell.includes(" ") ? `"${cell}"` : cell;
+    }).join(","))
+    .join("\n");
+ 
+  // Add a README sheet note at the top as a comment row
+  const note = [
+    "# CX App Customer Import Template",
+    "# Columns: id (unique), name, plan (Starter/Pro/Business), mrr (number), last_activity (e.g. Today/2d ago/7d ago), logins_last_30_days (number), support_tickets (number), plan_value (number - same as mrr unless different)",
+    "# Delete these comment rows before uploading",
+    rows,
+  ].join("\n");
+ 
+  const blob = new Blob([note], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "cx-customers-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
   // ── CSV upload ─────────────────────────────────────────────────────────────
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
