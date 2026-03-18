@@ -91,4 +91,24 @@ export async function getSession(): Promise<Session | null> {
   };
 }
 
-ex
+export async function assignPlan(email: string, plan: Plan) {
+  await supabase
+    .from("profiles")
+    .update({ plan })
+    .eq("email", email.toLowerCase());
+}
+
+export async function approveUser(userId: string) {
+  await supabase
+    .from("profiles")
+    .update({ is_approved: true })
+    .eq("id", userId);
+}
+
+export async function getAllUsers(): Promise<Profile[]> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false });
+  return (data ?? []) as Profile[];
+}
