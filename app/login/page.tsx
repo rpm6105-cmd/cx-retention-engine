@@ -33,6 +33,10 @@ export default function LoginPage() {
     const result = await login(loginEmail, loginPassword);
     setLoginLoading(false);
     if (!result.ok) {
+      if (result.pendingApproval) {
+        setLoginError("Your account is pending approval. You'll be notified once approved.");
+        return;
+      }
       setLoginError(result.error ?? "Login failed.");
       return;
     }
@@ -113,7 +117,12 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="login-password" className="text-xs font-semibold text-gray-700 dark:text-white/70">Password</label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="login-password" className="text-xs font-semibold text-gray-700 dark:text-white/70">Password</label>
+                  <Link href="/reset-password" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
+                    Forgot password?
+                  </Link>
+                </div>
                 <input
                   id="login-password"
                   type="password"
@@ -150,9 +159,9 @@ export default function LoginPage() {
                     <svg viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6"><path fillRule="evenodd" d="M16.704 4.296a1 1 0 0 1 0 1.414l-7.5 7.5a1 1 0 0 1-1.414 0l-3.5-3.5a1 1 0 0 1 1.414-1.414l2.793 2.793 6.793-6.793a1 1 0 0 1 1.414 0Z" clipRule="evenodd" /></svg>
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Check your email</div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Request submitted!</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-white/60">
-                      We sent a confirmation link to <span className="font-semibold">{signupEmail}</span>. Click it to activate your account then sign in.
+                      Your account for <span className="font-semibold">{signupEmail}</span> is pending approval. You'll be notified once approved.
                     </div>
                   </div>
                   <button
