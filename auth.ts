@@ -42,8 +42,9 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
 
-  // Check approval status
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session) return { ok: false, error: "Session error." };
 
   const { data: profile } = await supabase
@@ -52,12 +53,9 @@ export async function login(
     .eq("id", session.user.id)
     .single();
 
-  // Owner is always approved
   if (profile?.is_owner) return { ok: true };
 
-  // Not approved yet
   if (!profile?.is_approved) {
-    // Sign them out so they can't access protected routes
     await supabase.auth.signOut();
     return { ok: false, pendingApproval: true };
   }
@@ -70,7 +68,9 @@ export async function logout() {
 }
 
 export async function getSession(): Promise<Session | null> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session) return null;
 
   const { data: profile } = await supabase
@@ -98,11 +98,11 @@ export async function assignPlan(email: string, plan: Plan) {
     .eq("email", email.toLowerCase());
 }
 
-export async function approveUser(email: string) {
+export async function approveUser(userId: string) {
   await supabase
     .from("profiles")
     .update({ is_approved: true })
-    .eq("email", email.toLowerCase());
+    .eq("id", userId);
 }
 
 export async function getAllUsers(): Promise<Profile[]> {

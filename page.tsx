@@ -43,9 +43,9 @@ export default function AdminPage() {
   }, [router]);
 
   async function handleApprove(user: Profile) {
-    setApprovingId(user.email);
-    await approveUser(user.email);
-    setUsers((prev) => prev.map((u) => u.email === user.email ? { ...u, is_approved: true } : u));
+    setApprovingId(user.id);
+    await approveUser(user.id);
+    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_approved: true } : u));
     setApprovingId(null);
   }
 
@@ -62,15 +62,21 @@ export default function AdminPage() {
     setInviteSuccess(false);
     if (!inviteEmail) { setInviteError("Please enter an email address."); return; }
     setInviteLoading(true);
+
     const { error } = await supabase.auth.admin.inviteUserByEmail(inviteEmail, {
       data: { plan: invitePlan },
       redirectTo: "https://cx-retention-engine.vercel.app/dashboard",
     });
+
     setInviteLoading(false);
+
     if (error) {
-      setInviteError("Direct invite requires a server-side key. Share this link instead: https://cx-retention-engine.vercel.app/login");
+      setInviteError(
+        "Direct invite requires a server-side API key. To invite users, share this link: https://cx-retention-engine.vercel.app/login — then assign their plan from this dashboard once they sign up.",
+      );
       return;
     }
+
     setInviteSuccess(true);
     setInviteEmail("");
     const all = await getAllUsers();
@@ -89,7 +95,6 @@ export default function AdminPage() {
 
   const totalUsers = users.filter((u) => !u.is_owner).length;
   const pendingCount = pendingUsers.length;
-  const starterCount = users.filter((u) => u.plan === "Starter" && u.is_approved).length;
   const proCount = users.filter((u) => u.plan === "Pro").length;
   const businessCount = users.filter((u) => u.plan === "Business").length;
 
@@ -202,7 +207,7 @@ export default function AdminPage() {
                   <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No users found.</td></tr>
                 )}
                 {filtered.map((u) => (
-                  <tr key={u.email} className={`group transition-colors hover:bg-gray-50/80 ${!u.is_approved && !u.is_owner ? "bg-amber-50/50" : ""}`}>
+                  <tr key={u.id} className={`group transition-colors hover:bg-gray-50/80 ${!u.is_approved && !u.is_owner ? "bg-amber-50/50" : ""}`}>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-xs font-semibold text-white shadow-sm shadow-indigo-600/20 ring-1 ring-indigo-600/15">
@@ -231,11 +236,11 @@ export default function AdminPage() {
                         <div className="inline-flex items-center gap-2">
                           {!u.is_approved && (
                             <button
-                              disabled={approvingId === u.email}
+                              disabled={approvingId === u.id}
                               onClick={() => handleApprove(u)}
                               className="rounded-lg px-2 py-1 text-xs font-semibold text-white bg-indigo-600 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 disabled:opacity-60"
                             >
-                              {approvingId === u.email ? "Approving…" : "Approve"}
+                              {approvingId === u.id ? "Approving…" : "Approve"}
                             </button>
                           )}
                           <button
