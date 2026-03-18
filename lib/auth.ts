@@ -8,6 +8,7 @@ export interface Profile {
   email: string;
   plan: Plan;
   is_owner: boolean;
+  is_approved: boolean;
   created_at: string;
 }
 
@@ -17,6 +18,7 @@ export interface Session {
   name: string;
   plan: Plan;
   isOwner: boolean;
+  isApproved: boolean;
 }
 
 export async function signUp(
@@ -36,9 +38,26 @@ export async function signUp(
 export async function login(
   email: string,
   password: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; pendingApproval?: boolean }> {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { ok: false, error: "Session error." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_approved, is_owner")
+    .eq("id", session.user.id)
+    .single();
+
+  if (profile?.is_owner) return { ok: true };
+
+  if (!profile?.is_approved) {
+    await supabase.auth.signOut();
+    return { ok: false, pendingApproval: true };
+  }
+
   return { ok: true };
 }
 
@@ -64,6 +83,7 @@ export async function getSession(): Promise<Session | null> {
     name: profile.name,
     plan: profile.plan as Plan,
     isOwner: profile.is_owner,
+    isApproved: profile.is_approved,
   };
 }
 
@@ -71,6 +91,13 @@ export async function assignPlan(email: string, plan: Plan) {
   await supabase
     .from("profiles")
     .update({ plan })
+    .eq("email", email.toLowerCase());
+}
+
+export async function approveUser(email: string) {
+  await supabase
+    .from("profiles")
+    .update({ is_approved: true })
     .eq("email", email.toLowerCase());
 }
 
