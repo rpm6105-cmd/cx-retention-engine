@@ -47,15 +47,24 @@ export async function login(
   } = await supabase.auth.getSession();
   if (!session) return { ok: false, error: "Session error." };
 
+  // Owner email bypasses all checks
+  if (email.toLowerCase() === "rpm6105@gmail.com") return { ok: true };
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_approved, is_owner")
     .eq("id", session.user.id)
     .single();
 
-  if (profile?.is_owner) return { ok: true };
+  // If profile is null (RLS or timing issue)
+  if (!profile) {
+    await supabase.auth.signOut();
+    return { ok: false, error: "Profile not found. Please contact support." };
+  }
 
-  if (!profile?.is_approved) {
+  if (profile.is_owner) return { ok: true };
+
+  if (!profile.is_approved) {
     await supabase.auth.signOut();
     return { ok: false, pendingApproval: true };
   }
