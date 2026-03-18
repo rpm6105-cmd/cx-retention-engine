@@ -20,6 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 const PUBLIC_ROUTES = ["/", "/login"];
+const OWNER_EMAIL = "rpm6105@gmail.com";
 
 export default function RootLayout({
   children,
@@ -37,16 +38,34 @@ export default function RootLayout({
 
   useEffect(() => {
     if (isPublic) { setChecking(false); return; }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) { router.replace("/login"); return; }
-      if (isAdmin) {
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const userEmail = session.user.email ?? "";
+
+      // Owner always goes to /admin — block access to all other app routes
+      if (userEmail === OWNER_EMAIL && !isAdmin) {
+        router.replace("/admin");
+        return;
+      }
+
+      // Non-owners cannot access /admin
+      if (isAdmin && userEmail !== OWNER_EMAIL) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("is_owner")
           .eq("id", session.user.id)
           .single();
-        if (!profile?.is_owner) { router.replace("/dashboard"); return; }
+        if (!profile?.is_owner) {
+          router.replace("/dashboard");
+          return;
+        }
       }
+
       setChecking(false);
     });
   }, [pathname, isPublic, isAdmin, router]);
