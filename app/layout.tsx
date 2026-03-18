@@ -6,6 +6,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,28 +33,19 @@ export default function RootLayout({
   const isPublic = PUBLIC_ROUTES.includes(pathname);
   const isAdmin = pathname.startsWith("/admin");
   const showSidebar = !isPublic && !isAdmin;
+  const showOnboarding = !isPublic && !isAdmin;
 
   useEffect(() => {
-    if (isPublic) {
-      setChecking(false);
-      return;
-    }
-
+    if (isPublic) { setChecking(false); return; }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        router.replace("/login");
-        return;
-      }
+      if (!session) { router.replace("/login"); return; }
       if (isAdmin) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("is_owner")
           .eq("id", session.user.id)
           .single();
-        if (!profile?.is_owner) {
-          router.replace("/dashboard");
-          return;
-        }
+        if (!profile?.is_owner) { router.replace("/dashboard"); return; }
       }
       setChecking(false);
     });
@@ -84,6 +76,7 @@ export default function RootLayout({
         <main className={showSidebar ? "flex-1 p-6 lg:p-8" : "w-full"}>
           {children}
         </main>
+        {showOnboarding && <OnboardingModal />}
         <SpeedInsights />
       </body>
     </html>
