@@ -42,7 +42,9 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session) return { ok: false, error: "Session error." };
 
   const { data: profile } = await supabase
@@ -66,7 +68,9 @@ export async function logout() {
 }
 
 export async function getSession(): Promise<Session | null> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session) return null;
 
   const { data: profile } = await supabase
@@ -87,24 +91,4 @@ export async function getSession(): Promise<Session | null> {
   };
 }
 
-export async function assignPlan(email: string, plan: Plan) {
-  await supabase
-    .from("profiles")
-    .update({ plan })
-    .eq("email", email.toLowerCase());
-}
-
-export async function approveUser(email: string) {
-  await supabase
-    .from("profiles")
-    .update({ is_approved: true })
-    .eq("email", email.toLowerCase());
-}
-
-export async function getAllUsers(): Promise<Profile[]> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data ?? []) as Profile[];
-}
+ex
