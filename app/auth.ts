@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase.ts";
 
 export type Plan = "Starter" | "Pro" | "Business";
 
