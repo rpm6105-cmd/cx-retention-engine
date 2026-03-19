@@ -1,7 +1,6 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
-import { Geist, Geist_Mono } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,18 +9,7 @@ import { logout } from "@/lib/auth";
 import { OnboardingModal } from "@/components/OnboardingModal";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 const PUBLIC_ROUTES = ["/", "/login"];
-const OWNER_EMAIL = "rpm6105@gmail.com";
 
 export default function RootLayout({
   children,
@@ -30,7 +18,7 @@ export default function RootLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(!PUBLIC_ROUTES.includes(pathname));
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
 
@@ -41,13 +29,11 @@ export default function RootLayout({
 
   // ── Auth check ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isPublic) { setChecking(false); return; }
+    if (isPublic) return;
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.replace("/login"); return; }
-      const userEmail = session.user.email ?? "";
-      if (userEmail === OWNER_EMAIL && !isAdmin) { router.replace("/admin"); return; }
-      if (isAdmin && userEmail !== OWNER_EMAIL) {
-        const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
+      if (isAdmin) {
         if (!profile?.is_owner) { router.replace("/dashboard"); return; }
       }
       setChecking(false);
@@ -84,7 +70,7 @@ export default function RootLayout({
   if (!isPublic && checking) {
     return (
       <html lang="en">
-        <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen items-center justify-center bg-[var(--background)]`}>
+        <body className="antialiased flex min-h-screen items-center justify-center bg-[var(--background)]">
           <div className="flex flex-col items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
               <span className="text-sm font-extrabold">CX</span>
@@ -101,7 +87,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen bg-[var(--background)]`}>
+      <body className="antialiased flex min-h-screen bg-[var(--background)]">
         {showSidebar && <Sidebar />}
         <main className={showSidebar ? "flex-1 p-6 lg:p-8" : "w-full"}>
           {children}

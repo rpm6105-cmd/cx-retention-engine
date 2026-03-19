@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { logout } from "@/lib/auth";
 
@@ -13,23 +13,23 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [isDark, setIsDark] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(SIDEBAR_KEY) === "true";
+  });
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return savedTheme === "dark" || (!savedTheme && prefersDark);
+  });
   const [userName, setUserName] = useState("");
   const [userPlan, setUserPlan] = useState("Starter");
 
-  // Load saved preferences
   useEffect(() => {
-    const savedCollapsed = localStorage.getItem(SIDEBAR_KEY) === "true";
-    const savedTheme = localStorage.getItem(THEME_KEY);
-    setCollapsed(savedCollapsed);
-
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const dark = savedTheme === "dark" || (!savedTheme && prefersDark);
-    setIsDark(dark);
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.classList.toggle("light", !dark);
-  }, []);
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.classList.toggle("light", !isDark);
+  }, [isDark]);
 
   // Load profile
   useEffect(() => {

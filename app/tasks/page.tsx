@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
 import { useTasks, type Task } from "@/lib/useTasks";
-import { supabase } from "@/lib/supabase";
+import { getWorkspaceProfile, loadWorkspaceCustomers } from "@/lib/workspace";
 
 type Priority = Task["priority"];
 type Status = Task["status"];
@@ -24,14 +24,14 @@ export default function TasksPage() {
 
   useEffect(() => {
     async function loadCustomers() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const { data } = await supabase
-        .from("customers")
-        .select("id, name")
-        .eq("user_id", session.user.id)
-        .order("name");
-      if (data) setCustomers(data);
+      const profile = await getWorkspaceProfile();
+      if (!profile) return;
+      const data = await loadWorkspaceCustomers(profile);
+      setCustomers(
+        data
+          .map((customer) => ({ id: customer.id, name: customer.name }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
     }
     loadCustomers();
   }, []);

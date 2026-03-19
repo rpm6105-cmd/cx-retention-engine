@@ -137,7 +137,7 @@ export default function ResetPasswordPage() {
             /* Phase 1 — Request reset email */
             <div className="p-5">
               <h1 className="text-sm font-semibold text-gray-900">Reset your password</h1>
-              <p className="mt-0.5 text-xs text-gray-500">Enter your email and we'll send you a reset link.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Enter your email and we&apos;ll send you a reset link.</p>
 
               {sendSuccess ? (
                 <div className="mt-4 space-y-3 text-center">

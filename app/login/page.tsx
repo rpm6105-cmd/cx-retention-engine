@@ -161,7 +161,7 @@ export default function LoginPage() {
                   <div>
                     <div className="text-sm font-semibold text-gray-900 dark:text-white">Request submitted!</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-white/60">
-                      Your account for <span className="font-semibold">{signupEmail}</span> is pending approval. You'll be notified once approved.
+                      Your account for <span className="font-semibold">{signupEmail}</span> is pending approval. You&apos;ll be notified once approved.
                     </div>
                   </div>
                   <button

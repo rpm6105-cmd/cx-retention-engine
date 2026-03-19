@@ -1,56 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useRef, useState } from "react";
+import { getWorkspaceProfile, loadAssignments, saveAssignments, type AssignmentMap } from "@/lib/workspace";
 
-export type Assignments = Record<string, string>;
+export type Assignments = AssignmentMap;
 
 export function useAssignments(): [Assignments, React.Dispatch<React.SetStateAction<Assignments>>] {
   const [assignments, setAssignments] = useState<Assignments>({});
-  const [userId, setUserId] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.id) setUserId(session.user.id);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!userId) return;
+    let active = true;
 
     async function load() {
-      const { data } = await supabase
-        .from("assignments")
-        .select("customer_id, csm_name")
-        .eq("user_id", userId);
-
-      if (data) {
-        const map: Assignments = {};
-        data.forEach((r) => { map[r.customer_id] = r.csm_name; });
-        setAssignments(map);
-      }
+      const profile = await getWorkspaceProfile();
+      if (!profile || !active) return;
+      setProfileId(profile.id);
+      const workspaceAssignments = await loadAssignments(profile);
+      if (!active) return;
+      setAssignments(workspaceAssignments);
+      hydratedRef.current = true;
     }
 
     load();
-  }, [userId]);
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // Persist to Supabase whenever assignments change
   useEffect(() => {
-    if (!userId || Object.keys(assignments).length === 0) return;
+    if (!hydratedRef.current || !profileId) return;
 
-    async function persist() {
-      const rows = Object.entries(assignments).map(([customer_id, csm_name]) => ({
-        user_id: userId,
-        customer_id,
-        csm_name,
-      }));
-      await supabase
-        .from("assignments")
-        .upsert(rows, { onConflict: "user_id,customer_id" });
+    async function sync() {
+      const profile = await getWorkspaceProfile();
+      if (!profile) return;
+      await saveAssignments(profile, assignments);
     }
 
-    persist();
-  }, [assignments, userId]);
+    sync();
+  }, [assignments, profileId]);
 
   return [assignments, setAssignments];
 }

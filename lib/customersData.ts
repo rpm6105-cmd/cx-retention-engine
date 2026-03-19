@@ -9,15 +9,31 @@ export type CustomerTask = {
 
 export type CustomerRow = {
   id: string;
+  company_id?: string | null;
   name: string;
   plan: CustomerPlan;
   mrr: number;
+  arr?: number;
   lastActivity: string;
 
   // Inputs used by calculateHealth(row)
   logins_last_30_days: number;
   support_tickets: number;
   plan_value: number;
+  active_users?: number;
+  monthly_logins?: number;
+  feature_usage_score?: number;
+  support_tickets_last_30_days?: number;
+  csat?: number;
+  nps?: number;
+  last_login_days_ago?: number;
+  renewal_date?: string;
+  renewalDays?: number | null;
+  healthScore?: number;
+  healthCategory?: "Healthy" | "Neutral" | "At Risk";
+  churnRisk?: "High Risk" | "Medium Risk" | "Low Risk";
+  assignedCsmEmail?: string | null;
+  assignedCsmName?: string | null;
 
   // Optional detail-only fields (still from the same dataset)
   usageTrend?: number[];
@@ -129,4 +145,3 @@ export const DEFAULT_CUSTOMERS: CustomerRow[] = [
 export function getCustomerById(id: string): CustomerRow | undefined {
   return DEFAULT_CUSTOMERS.find((c) => c.id === id);
 }
-

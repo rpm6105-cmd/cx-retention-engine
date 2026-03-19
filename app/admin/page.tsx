@@ -1,25 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAllUsers, assignPlan, approveUser, logout, type Profile, type Plan } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { assignPlan, approveUser, logout, type Plan, type Profile } from "@/lib/auth";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardBody } from "@/components/ui/Card";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import {
+  buildRetentionTemplateCsv,
+  getCompanyUsers,
+  getWorkspaceProfile,
+  importCustomersFromCsv,
+  loadAssignments,
+  loadUploadHistory,
+  loadWorkspaceCustomers,
+  saveAssignments,
+  type AssignmentMap,
+  type WorkspaceProfile,
+  type WorkspaceUpload,
+} from "@/lib/workspace";
+import type { CustomerRow } from "@/lib/customersData";
 
 const PLANS: Plan[] = ["Starter", "Pro", "Business"];
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://cx-retention-engine.vercel.app";
 
 export default function AdminPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
   const [users, setUsers] = useState<Profile[]>([]);
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentMap>({});
+  const [uploads, setUploads] = useState<WorkspaceUpload[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [assigningUser, setAssigningUser] = useState<Profile | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<Plan>("Starter");
-  const [loading, setLoading] = useState(true);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState("");
 
-  // Invite modal state
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePlan, setInvitePlan] = useState<Plan>("Starter");
@@ -28,59 +52,153 @@ export default function AdminPage() {
   const [inviteError, setInviteError] = useState("");
 
   useEffect(() => {
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.replace("/login"); return; }
-      if (session.user.email !== "rpm6105@gmail.com") {
-        const { data: profile } = await supabase.from("profiles").select("is_owner").eq("id", session.user.id).single();
-        if (!profile?.is_owner) { router.replace("/dashboard"); return; }
+    let active = true;
+
+    async function bootstrap() {
+      const workspaceProfile = await getWorkspaceProfile();
+      if (!workspaceProfile) {
+        router.replace("/login");
+        return;
       }
-      const all = await getAllUsers();
-      setUsers(all);
+      if (!workspaceProfile.is_owner) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      const [companyUsers, workspaceCustomers, workspaceAssignments, uploadHistory] = await Promise.all([
+        getCompanyUsers(workspaceProfile),
+        loadWorkspaceCustomers(workspaceProfile),
+        loadAssignments(workspaceProfile),
+        loadUploadHistory(workspaceProfile),
+      ]);
+
+      if (!active) return;
+      setProfile(workspaceProfile);
+      setUsers(companyUsers);
+      setCustomers(workspaceCustomers);
+      setAssignments(workspaceAssignments);
+      setUploads(uploadHistory);
+      setSelectedCustomerId(workspaceCustomers[0]?.id ?? "");
+      const defaultAssignee = companyUsers.find((user) => !user.is_owner)?.id ?? "";
+      setSelectedAssigneeId(defaultAssignee);
       setLoading(false);
     }
-    init();
+
+    bootstrap();
+    return () => {
+      active = false;
+    };
   }, [router]);
+
+  const pendingUsers = users.filter((user) => !user.is_approved && !user.is_owner);
+  const filteredUsers = users.filter((user) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return `${user.name} ${user.email}`.toLowerCase().includes(query);
+  });
+
+  const csmUsers = useMemo(() => users.filter((user) => !user.is_owner), [users]);
+
+  async function refreshWorkspace() {
+    if (!profile) return;
+    const [companyUsers, workspaceCustomers, workspaceAssignments, uploadHistory] = await Promise.all([
+      getCompanyUsers(profile),
+      loadWorkspaceCustomers(profile),
+      loadAssignments(profile),
+      loadUploadHistory(profile),
+    ]);
+    setUsers(companyUsers);
+    setCustomers(workspaceCustomers);
+    setAssignments(workspaceAssignments);
+    setUploads(uploadHistory);
+    setSelectedCustomerId((current) => current || workspaceCustomers[0]?.id || "");
+    setSelectedAssigneeId((current) => current || companyUsers.find((user) => !user.is_owner)?.id || "");
+  }
+
+  function downloadTemplate() {
+    const blob = new Blob([buildRetentionTemplateCsv()], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "cx-retention-master-template.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function handleApprove(user: Profile) {
     setApprovingId(user.id);
     await approveUser(user.id);
-    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_approved: true } : u));
+    await refreshWorkspace();
     setApprovingId(null);
   }
 
-  async function handleAssign() {
+  async function handleAssignPlan() {
     if (!assigningUser) return;
     await assignPlan(assigningUser.email, selectedPlan);
-    setUsers((prev) => prev.map((u) => u.email === assigningUser.email ? { ...u, plan: selectedPlan } : u));
+    await refreshWorkspace();
     setAssigningUser(null);
   }
 
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault();
-    setInviteError("");
-    setInviteSuccess(false);
-    if (!inviteEmail) { setInviteError("Please enter an email address."); return; }
-    setInviteLoading(true);
+  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !profile) return;
 
-    const { error } = await supabase.auth.admin.inviteUserByEmail(inviteEmail, {
-      data: { plan: invitePlan },
-      redirectTo: "https://cx-retention-engine.vercel.app/dashboard",
-    });
+    setUploading(true);
+    setUploadError("");
+    setUploadSuccess("");
 
-    setInviteLoading(false);
+    const text = await file.text();
+    const result = await importCustomersFromCsv(profile, text, file.name);
 
-    if (error) {
-      setInviteError(
-        "Direct invite requires a server-side API key. To invite users, share this link: https://cx-retention-engine.vercel.app/login — then assign their plan from this dashboard once they sign up.",
-      );
-      return;
+    if (!result.ok) {
+      setUploadError(result.error);
+    } else {
+      setUploadSuccess(`${result.customers.length} customers uploaded from ${file.name}.`);
+      await refreshWorkspace();
     }
 
-    setInviteSuccess(true);
-    setInviteEmail("");
-    const all = await getAllUsers();
-    setUsers(all);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleAssignmentSave() {
+    if (!profile || !selectedCustomerId || !selectedAssigneeId) return;
+    const nextAssignments = {
+      ...assignments,
+      [selectedCustomerId]: selectedAssigneeId,
+    };
+    await saveAssignments(profile, nextAssignments);
+    setAssignments(nextAssignments);
+  }
+
+  async function handleInvite(event: React.FormEvent) {
+    event.preventDefault();
+    setInviteLoading(true);
+    setInviteSuccess(false);
+    setInviteError("");
+
+    try {
+      const response = await fetch("/api/admin/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail,
+          plan: invitePlan,
+          redirectTo: `${APP_URL}/dashboard`,
+        }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setInviteError(payload.error ?? "Failed to send invite.");
+      } else {
+        setInviteSuccess(true);
+        setInviteEmail("");
+      }
+    } catch {
+      setInviteError("Failed to send invite. Please try again.");
+    }
+
+    setInviteLoading(false);
   }
 
   async function handleLogout() {
@@ -88,15 +206,12 @@ export default function AdminPage() {
     router.push("/login");
   }
 
-  const pendingUsers = users.filter((u) => !u.is_approved && !u.is_owner);
-  const filtered = users.filter(
-    (u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const totalUsers = users.filter((u) => !u.is_owner).length;
-  const pendingCount = pendingUsers.length;
-  const proCount = users.filter((u) => u.plan === "Pro").length;
-  const businessCount = users.filter((u) => u.plan === "Business").length;
+  function assignedLabel(customerId: string) {
+    const assigned = assignments[customerId];
+    if (!assigned) return "Unassigned";
+    const matched = users.find((user) => user.id === assigned || user.email === assigned || user.name === assigned);
+    return matched?.name || matched?.email || assigned;
+  }
 
   function planTone(plan: Plan): "neutral" | "warning" | "success" {
     if (plan === "Business") return "success";
@@ -118,8 +233,6 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
       <div className="mx-auto max-w-6xl space-y-6 px-1 py-2 sm:px-3 sm:py-6">
-
-        {/* Header */}
         <header className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">
@@ -127,67 +240,143 @@ export default function AdminPage() {
                 <span className="text-sm font-extrabold">CX</span>
               </div>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Owner Dashboard</h1>
-                <p className="mt-0.5 text-sm text-gray-600">Manage all signed-up users and their plans.</p>
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Admin Workspace</h1>
+                <p className="mt-0.5 text-sm text-gray-600">Manage the shared company dataset, assignments, approvals, and invites.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Badge tone="success">Owner</Badge>
-              <Button variant="primary" onClick={() => { setInviteOpen(true); setInviteSuccess(false); setInviteError(""); }}>
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" /><path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" /></svg>
-                Invite user
-              </Button>
-              <Button variant="secondary" onClick={handleLogout}>
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" /><path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-.943a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 1 1-1.004-1.114l1.048-.943H6.75A.75.75 0 0 1 6 10Z" clipRule="evenodd" /></svg>
-                Sign out
-              </Button>
+              <Button variant="primary" onClick={() => { setInviteOpen(true); setInviteSuccess(false); setInviteError(""); }}>Invite user</Button>
+              <Button variant="secondary" onClick={handleLogout}>Sign out</Button>
             </div>
           </div>
         </header>
 
-        {/* Pending approvals banner */}
-        {pendingCount > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500 text-white">
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-amber-900">{pendingCount} user{pendingCount > 1 ? "s" : ""} waiting for approval</div>
-                <div className="text-xs text-amber-700">Review and approve their accounts in the table below.</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* KPI Cards */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Total users", value: totalUsers },
-            { label: "Pending", value: pendingCount },
-            { label: "Pro", value: proCount },
-            { label: "Business", value: businessCount },
+            { label: "Team members", value: users.filter((user) => !user.is_owner).length },
+            { label: "Pending approvals", value: pendingUsers.length },
+            { label: "Customers", value: customers.length },
+            { label: "Uploads", value: uploads.length },
           ].map((kpi) => (
-            <div key={kpi.label} className={`rounded-2xl border bg-white p-5 shadow-sm shadow-gray-900/5 ${kpi.label === "Pending" && pendingCount > 0 ? "border-amber-200 bg-amber-50" : "border-gray-200"}`}>
+            <div key={kpi.label} className={`rounded-2xl border bg-white p-5 shadow-sm shadow-gray-900/5 ${kpi.label === "Pending approvals" && pendingUsers.length > 0 ? "border-amber-200 bg-amber-50" : "border-gray-200"}`}>
               <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{kpi.label}</div>
-              <div className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${kpi.label === "Pending" && pendingCount > 0 ? "text-amber-700" : "text-gray-900"}`}>{kpi.value}</div>
+              <div className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${kpi.label === "Pending approvals" && pendingUsers.length > 0 ? "text-amber-700" : "text-gray-900"}`}>{kpi.value}</div>
             </div>
           ))}
         </section>
 
-        {/* Users Table */}
+        <Card>
+          <CardHeader className="border-b border-gray-200">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Master dataset</h2>
+              <p className="mt-0.5 text-xs text-gray-600">Upload the shared company CSV once, and every approved CSM works from the same account portfolio.</p>
+            </div>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Button variant="primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? "Uploading…" : "Upload master CSV"}</Button>
+              <Button variant="secondary" onClick={downloadTemplate}>Download template</Button>
+              <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+            </div>
+            {uploadError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700">{uploadError}</div>}
+            {uploadSuccess && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">{uploadSuccess}</div>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Latest upload</div>
+                <div className="mt-2 text-sm font-semibold text-gray-900">{uploads[0]?.fileName ?? "No uploads yet"}</div>
+                <div className="mt-1 text-xs text-gray-600">{uploads[0] ? `${uploads[0].rowCount} rows · ${new Date(uploads[0].uploadedAt).toLocaleString()}` : "Upload the first company master dataset to initialize the workspace."}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Accepted schemas</div>
+                <div className="mt-2 text-sm font-semibold text-gray-900">Retention master CSV, AI Copilot CSV, or legacy simplified CSV</div>
+                <div className="mt-1 text-xs text-gray-600">The uploader now normalizes all supported schemas into the same shared customer model.</div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <Card>
+            <CardHeader className="border-b border-gray-200">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Customer assignments</h2>
+                <p className="mt-0.5 text-xs text-gray-600">Assign each customer to a CSM so their dashboard view stays scoped correctly.</p>
+              </div>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-700">Customer</label>
+                  <select value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>{customer.name} · {customer.id}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-700">Assign to CSM</label>
+                  <select value={selectedAssigneeId} onChange={(event) => setSelectedAssigneeId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
+                    {csmUsers.map((user) => (
+                      <option key={user.id} value={user.id}>{user.name} · {user.email}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Button variant="primary" onClick={handleAssignmentSave} disabled={!selectedCustomerId || !selectedAssigneeId}>Save assignment</Button>
+              </div>
+              <div className="max-h-72 overflow-auto rounded-2xl border border-gray-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    <tr>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="px-4 py-3">Assigned to</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {customers.map((customer) => (
+                      <tr key={customer.id}>
+                        <td className="px-4 py-3 text-gray-900">{customer.name}</td>
+                        <td className="px-4 py-3 text-gray-700">{assignedLabel(customer.id)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b border-gray-200">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Upload history</h2>
+                <p className="mt-0.5 text-xs text-gray-600">Recent master dataset uploads for this company workspace.</p>
+              </div>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              {uploads.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">No uploads yet.</div>
+              ) : (
+                uploads.map((upload) => (
+                  <div key={upload.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-gray-900">{upload.fileName}</div>
+                    <div className="mt-1 text-xs text-gray-600">{upload.rowCount} rows · {new Date(upload.uploadedAt).toLocaleString()}</div>
+                    <div className="mt-3"><Badge tone={upload.status === "completed" ? "success" : "warning"}>{upload.status}</Badge></div>
+                  </div>
+                ))
+              )}
+            </CardBody>
+          </Card>
+        </section>
+
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-3 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">All Users</h2>
-              <p className="mt-0.5 text-xs text-gray-600">Approve accounts and assign plans.</p>
+              <h2 className="text-sm font-semibold text-gray-900">Company users</h2>
+              <p className="mt-0.5 text-xs text-gray-600">Approve users and assign plans within this workspace.</p>
             </div>
-            <div className="relative w-full sm:w-72">
-              <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M8.5 3.5a5 5 0 1 0 3.846 8.19l2.732 2.732a.75.75 0 1 0 1.06-1.06l-2.732-2.732A5 5 0 0 0 8.5 3.5ZM5 8.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0Z" clipRule="evenodd" /></svg>
-              </div>
-              <input placeholder="Search users…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15" />
-            </div>
+            <input placeholder="Search users…" value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 sm:w-72" />
           </CardHeader>
 
           <div className="max-h-[520px] overflow-auto">
@@ -203,50 +392,34 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No users found.</td></tr>
-                )}
-                {filtered.map((u) => (
-                  <tr key={u.id} className={`group transition-colors hover:bg-gray-50/80 ${!u.is_approved && !u.is_owner ? "bg-amber-50/50" : ""}`}>
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className={`group transition-colors hover:bg-gray-50/80 ${!user.is_approved && !user.is_owner ? "bg-amber-50/50" : ""}`}>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-xs font-semibold text-white shadow-sm shadow-indigo-600/20 ring-1 ring-indigo-600/15">
-                          {u.name.split(" ").slice(0, 2).map((p) => p[0]).join("")}
+                          {user.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate font-medium text-gray-900">{u.name}</div>
-                          {u.is_owner && <div className="text-xs font-semibold text-indigo-600">Owner</div>}
+                          <div className="truncate font-medium text-gray-900">{user.name}</div>
+                          {user.is_owner && <div className="text-xs font-semibold text-indigo-600">Owner</div>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-gray-700">{u.email}</td>
+                    <td className="px-5 py-4 text-gray-700">{user.email}</td>
                     <td className="px-5 py-4">
-                      {u.is_owner ? (
-                        <Badge tone="success">Owner</Badge>
-                      ) : u.is_approved ? (
-                        <Badge tone="success">Approved</Badge>
-                      ) : (
-                        <Badge tone="warning">Pending</Badge>
-                      )}
+                      {user.is_owner ? <Badge tone="success">Owner</Badge> : user.is_approved ? <Badge tone="success">Approved</Badge> : <Badge tone="warning">Pending</Badge>}
                     </td>
-                    <td className="px-5 py-4"><Badge tone={planTone(u.plan)}>{u.plan}</Badge></td>
-                    <td className="px-5 py-4 whitespace-nowrap text-gray-700">{new Date(u.created_at).toLocaleDateString()}</td>
+                    <td className="px-5 py-4"><Badge tone={planTone(user.plan)}>{user.plan}</Badge></td>
+                    <td className="px-5 py-4 whitespace-nowrap text-gray-700">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-5 py-4 text-right">
-                      {!u.is_owner && (
+                      {!user.is_owner && (
                         <div className="inline-flex items-center gap-2">
-                          {!u.is_approved && (
-                            <button
-                              disabled={approvingId === u.id}
-                              onClick={() => handleApprove(u)}
-                              className="rounded-lg px-2 py-1 text-xs font-semibold text-white bg-indigo-600 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 disabled:opacity-60"
-                            >
-                              {approvingId === u.id ? "Approving…" : "Approve"}
+                          {!user.is_approved && (
+                            <button disabled={approvingId === user.id} onClick={() => handleApprove(user)} className="rounded-lg px-2 py-1 text-xs font-semibold text-white bg-indigo-600 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 disabled:opacity-60">
+                              {approvingId === user.id ? "Approving…" : "Approve"}
                             </button>
                           )}
-                          <button
-                            className="rounded-lg px-2 py-1 text-xs font-semibold text-gray-700 opacity-0 transition hover:bg-gray-100 hover:text-gray-900 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-4 focus:ring-indigo-600/15"
-                            onClick={() => { setAssigningUser(u); setSelectedPlan(u.plan); }}
-                          >
+                          <button className="rounded-lg px-2 py-1 text-xs font-semibold text-gray-700 opacity-0 transition hover:bg-gray-100 hover:text-gray-900 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-4 focus:ring-indigo-600/15" onClick={() => { setAssigningUser(user); setSelectedPlan(user.plan); }}>
                             Assign plan
                           </button>
                         </div>
@@ -260,13 +433,12 @@ export default function AdminPage() {
         </Card>
       </div>
 
-      {/* Invite Modal */}
       {inviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setInviteOpen(false); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setInviteOpen(false); }}>
           <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-lg shadow-slate-900/15">
             <div className="border-b border-gray-200 p-4 sm:p-5">
               <div className="text-sm font-semibold text-gray-900">Invite user</div>
-              <div className="mt-0.5 text-xs text-gray-600">Send an invite link to a new user.</div>
+              <div className="mt-0.5 text-xs text-gray-600">Send a role-free signup invite into this workspace.</div>
             </div>
             {inviteSuccess ? (
               <div className="p-6 text-center">
@@ -280,19 +452,19 @@ export default function AdminPage() {
               <form onSubmit={handleInvite} className="space-y-4 p-4 sm:p-5">
                 <div className="space-y-1.5">
                   <label htmlFor="invite-email" className="text-xs font-semibold text-gray-700">Email address</label>
-                  <input id="invite-email" type="email" placeholder="user@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15" />
+                  <input id="invite-email" type="email" placeholder="user@company.com" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15" />
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="invite-plan" className="text-xs font-semibold text-gray-700">Assign plan</label>
-                  <select id="invite-plan" value={invitePlan} onChange={(e) => setInvitePlan(e.target.value as Plan)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
-                    {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  <select id="invite-plan" value={invitePlan} onChange={(event) => setInvitePlan(event.target.value as Plan)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
+                    {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
                   </select>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                   <div className="text-xs font-semibold text-gray-700 mb-1.5">Or share signup link directly</div>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 truncate rounded-lg bg-white border border-gray-200 px-2 py-1.5 text-xs text-gray-700">https://cx-retention-engine.vercel.app/login</code>
-                    <button type="button" onClick={() => navigator.clipboard.writeText("https://cx-retention-engine.vercel.app/login")} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">Copy</button>
+                    <code className="flex-1 truncate rounded-lg bg-white border border-gray-200 px-2 py-1.5 text-xs text-gray-700">{APP_URL}/login</code>
+                    <button type="button" onClick={() => navigator.clipboard.writeText(`${APP_URL}/login`)} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">Copy</button>
                   </div>
                 </div>
                 {inviteError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">{inviteError}</div>}
@@ -306,9 +478,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Assign Plan Modal */}
       {assigningUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setAssigningUser(null); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setAssigningUser(null); }}>
           <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-lg shadow-slate-900/15">
             <div className="border-b border-gray-200 p-4 sm:p-5">
               <div className="text-sm font-semibold text-gray-900">Assign Plan</div>
@@ -316,13 +487,13 @@ export default function AdminPage() {
             </div>
             <div className="space-y-2 p-4 sm:p-5">
               <label className="text-xs font-semibold text-gray-700">Plan</label>
-              <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value as Plan)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
-                {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+              <select value={selectedPlan} onChange={(event) => setSelectedPlan(event.target.value as Plan)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 shadow-sm outline-none focus:border-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-600/15">
+                {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
               </select>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 p-4 sm:p-5">
               <Button variant="secondary" onClick={() => setAssigningUser(null)}>Cancel</Button>
-              <Button variant="primary" onClick={handleAssign}>Save</Button>
+              <Button variant="primary" onClick={handleAssignPlan}>Save</Button>
             </div>
           </div>
         </div>

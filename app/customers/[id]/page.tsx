@@ -13,11 +13,17 @@ import { usePlan } from "@/lib/usePlan";
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
-  const { canUseCopilot, isStarter } = usePlan();
+  const { isStarter } = usePlan();
 
   const [customers] = useCustomers();
   const base = useMemo(() => customers.find((c) => c.id === id), [customers, id]);
-  const customer = (base ?? {
+  const customer = {
+    usageTrend: [55, 57, 60, 62, 61, 64, 66, 68, 67, 70, 72, 71],
+    tasks: [
+      { id: "T-NEW-1", title: "Intro call", due: "Fri", status: "Open" as const },
+      { id: "T-NEW-2", title: "Send onboarding checklist", due: "Mon", status: "Open" as const },
+    ],
+    ...(base ?? {
     id,
     name: `Customer ${id}`,
     plan: "Starter" as const,
@@ -26,16 +32,13 @@ export default function CustomerDetailPage() {
     logins_last_30_days: 12,
     support_tickets: 2,
     plan_value: 499,
-    usageTrend: [55, 57, 60, 62, 61, 64, 66, 68, 67, 70, 72, 71],
-    tasks: [
-      { id: "T-NEW-1", title: "Intro call", due: "Fri", status: "Open" as const },
-      { id: "T-NEW-2", title: "Send onboarding checklist", due: "Mon", status: "Open" as const },
-    ],
-  }) as {
+  }),
+  } as {
     id: string;
     name: string;
     plan: "Starter" | "Pro" | "Business";
     mrr: number;
+    arr?: number;
     lastActivity: string;
     logins_last_30_days: number;
     support_tickets: number;
@@ -49,7 +52,7 @@ export default function CustomerDetailPage() {
     }[];
   };
 
-  const arr = customer.mrr * 12;
+  const arr = customer.arr ?? customer.mrr * 12;
   const healthScore = Math.round(calculateHealth(customer));
   const risk = riskFlag(healthScore);
   const riskLevel: "High" | "Medium" | "Low" = risk.startsWith("High")
@@ -66,19 +69,16 @@ export default function CustomerDetailPage() {
 
   const riskIndicators = indicatorsForRisk(riskLevel);
 
-  const daysSinceActivity = useMemo(
-    () => parseLastActivityDays(customer.lastActivity),
-    [customer.lastActivity],
-  );
+  const daysSinceActivity = parseLastActivityDays(customer.lastActivity);
 
-  const keyIssues = useMemo(() => {
+  const keyIssues = (() => {
     const issues: string[] = [];
     if (customer.logins_last_30_days < 10) issues.push("Low usage");
     if (customer.support_tickets >= 5) issues.push("High support tickets");
     if (Number.isFinite(daysSinceActivity) && daysSinceActivity >= 7)
       issues.push("Recent inactivity");
     return issues;
-  }, [customer.logins_last_30_days, customer.support_tickets, daysSinceActivity]);
+  })();
 
   const [copilotOutput, setCopilotOutput] = useState<string>(
     "Select an action to generate a summary, recommendation, or email draft.",
