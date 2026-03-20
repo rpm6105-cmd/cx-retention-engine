@@ -174,18 +174,27 @@ export default function Sidebar() {
             </svg>
           </button>
         ) : (
-          <div className="flex items-center gap-3">
-            <Link href="/profile" onClick={() => setMobileOpen(false)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/20 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/30" title="View profile">
-              {userName ? userName.split(" ").slice(0, 2).map((p) => p[0]).join("") : "?"}
-            </Link>
-            <Link href="/profile" onClick={() => setMobileOpen(false)} className="min-w-0 flex-1 hover:opacity-80 transition">
-              <div className="truncate text-xs font-semibold text-white">{userName || "User"}</div>
-              <div className="truncate text-xs text-white/50">{userPlan}</div>
-            </Link>
-            <button onClick={handleLogout} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Link href="/profile" onClick={() => setMobileOpen(false)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/20 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/30" title="View profile">
+                {userName ? userName.split(" ").slice(0, 2).map((p) => p[0]).join("") : "?"}
+              </Link>
+              <Link href="/profile" onClick={() => setMobileOpen(false)} className="min-w-0 flex-1 hover:opacity-80 transition">
+                <div className="truncate text-xs font-semibold text-white">{userName || "User"}</div>
+                <div className="truncate text-xs text-white/50">{userPlan}</div>
+              </Link>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+              aria-label="Sign out"
+              title="Sign out"
+            >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" /><path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-.943a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 1 1-1.004-1.114l1.048-.943H6.75A.75.75 0 0 1 6 10Z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-.943a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 1 1-1.004-1.114l1.048-.943H6.75A.75.75 0 0 1 6 10Z" clipRule="evenodd" />
               </svg>
+              <span>Sign out</span>
             </button>
           </div>
         )}
