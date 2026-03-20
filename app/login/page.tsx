@@ -8,6 +8,7 @@ import { login, signUp } from "@/lib/auth";
 export default function LoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"login" | "signup">("login");
+  const ownerEmail = "rpm6105@gmail.com";
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -22,6 +23,52 @@ export default function LoginPage() {
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [signupPendingApproval, setSignupPendingApproval] = useState(false);
+  const [ownerBootstrapLoading, setOwnerBootstrapLoading] = useState(false);
+  const [ownerBootstrapError, setOwnerBootstrapError] = useState("");
+
+  const showOwnerRecovery =
+    (tab === "login" && loginEmail.trim().toLowerCase() === ownerEmail) ||
+    (tab === "signup" && signupEmail.trim().toLowerCase() === ownerEmail);
+
+  async function handleOwnerBootstrap() {
+    setOwnerBootstrapError("");
+
+    const email = tab === "login" ? loginEmail.trim().toLowerCase() : signupEmail.trim().toLowerCase();
+    const password = tab === "login" ? loginPassword : signupPassword;
+    const name = (signupName.trim() || "Rohith PM");
+
+    if (email !== ownerEmail) {
+      setOwnerBootstrapError("Owner recovery is available only for rpm6105@gmail.com.");
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setOwnerBootstrapError("Enter the owner password first. It must be at least 6 characters.");
+      return;
+    }
+
+    setOwnerBootstrapLoading(true);
+    const response = await fetch("/api/auth/bootstrap-owner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+    const result = (await response.json()) as { ok: boolean; error?: string };
+    setOwnerBootstrapLoading(false);
+
+    if (!response.ok || !result.ok) {
+      setOwnerBootstrapError(result.error ?? "Unable to repair owner access right now.");
+      return;
+    }
+
+    const loginResult = await login(email, password);
+    if (!loginResult.ok) {
+      setOwnerBootstrapError(loginResult.error ?? "Owner account was repaired, but sign-in still failed.");
+      return;
+    }
+
+    router.push("/admin");
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -151,6 +198,27 @@ export default function LoginPage() {
                   {loginError}
                 </div>
               )}
+              {showOwnerRecovery && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-xs text-indigo-900 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-100">
+                  <div className="font-semibold">Owner recovery</div>
+                  <div className="mt-1 text-indigo-800/90 dark:text-indigo-100/80">
+                    If the seeded owner account is stuck between signup and login, repair it here without waiting for email confirmation.
+                  </div>
+                  {ownerBootstrapError && (
+                    <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                      {ownerBootstrapError}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleOwnerBootstrap}
+                    disabled={ownerBootstrapLoading}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 disabled:opacity-60 dark:border-indigo-400/30 dark:bg-white/10 dark:text-indigo-100 dark:hover:bg-white/15"
+                  >
+                    {ownerBootstrapLoading ? "Repairing owner access…" : "Repair owner access"}
+                  </button>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={loginLoading}
@@ -208,6 +276,27 @@ export default function LoginPage() {
                   </div>
                   {signupError && (
                     <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">{signupError}</div>
+                  )}
+                  {showOwnerRecovery && (
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-xs text-indigo-900 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-100">
+                      <div className="font-semibold">Owner recovery</div>
+                      <div className="mt-1 text-indigo-800/90 dark:text-indigo-100/80">
+                        If this owner email already exists, use the password above and we&apos;ll repair the owner account directly.
+                      </div>
+                      {ownerBootstrapError && (
+                        <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                          {ownerBootstrapError}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleOwnerBootstrap}
+                        disabled={ownerBootstrapLoading}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 focus:outline-none focus:ring-4 focus:ring-indigo-600/15 disabled:opacity-60 dark:border-indigo-400/30 dark:bg-white/10 dark:text-indigo-100 dark:hover:bg-white/15"
+                      >
+                        {ownerBootstrapLoading ? "Repairing owner access…" : "Repair owner access"}
+                      </button>
+                    </div>
                   )}
                   <button type="submit" disabled={signupLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20 disabled:opacity-60">
                     {signupLoading ? (
