@@ -21,6 +21,60 @@ export interface Session {
   isApproved: boolean;
 }
 
+function domainFromEmail(email: string) {
+  return email.split("@")[1]?.toLowerCase() ?? "workspace.local";
+}
+
+async function ensureCompanyForEmail(email: string) {
+  const domain = domainFromEmail(email);
+  await supabase.from("companies").upsert(
+    {
+      id: domain,
+      name: domain,
+      domain,
+    },
+    { onConflict: "id" },
+  );
+  return domain;
+}
+
+async function ensureProfileFromUser(user: {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown>;
+}) {
+  const email = user.email?.toLowerCase();
+  if (!email) return null;
+
+  const companyId = await ensureCompanyForEmail(email);
+  const name =
+    typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
+      ? user.user_metadata.name.trim()
+      : email.split("@")[0];
+
+  await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      email,
+      name,
+      plan: "Starter",
+      is_owner: false,
+      is_approved: false,
+      role: "csm",
+      company_id: companyId,
+    },
+    { onConflict: "id" },
+  );
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_approved, is_owner")
+    .eq("id", user.id)
+    .single();
+
+  return profile;
+}
+
 export async function signUp(
   name: string,
   email: string,
@@ -37,15 +91,19 @@ export async function signUp(
     return { ok: true, requiresEmailConfirmation: true };
   }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("is_approved, is_owner")
     .eq("id", data.session.user.id)
     .single();
 
   if (!profile) {
+    profile = await ensureProfileFromUser(data.session.user);
+  }
+
+  if (!profile) {
     await supabase.auth.signOut();
-    return { ok: false, error: "Profile not found. Please contact support." };
+    return { ok: false, error: "Profile setup failed. Please try again." };
   }
 
   if (profile.is_owner) {
@@ -72,16 +130,19 @@ export async function login(
   } = await supabase.auth.getSession();
   if (!session) return { ok: false, error: "Session error." };
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("is_approved, is_owner")
     .eq("id", session.user.id)
     .single();
 
-  // If profile is null (RLS or timing issue)
+  if (!profile) {
+    profile = await ensureProfileFromUser(session.user);
+  }
+
   if (!profile) {
     await supabase.auth.signOut();
-    return { ok: false, error: "Profile not found. Please contact support." };
+    return { ok: false, error: "Profile setup failed. Please try again." };
   }
 
   if (profile.is_owner) return { ok: true };
@@ -104,11 +165,21 @@ export async function getSession(): Promise<Session | null> {
   } = await supabase.auth.getSession();
   if (!session) return null;
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", session.user.id)
     .single();
+
+  if (!profile) {
+    await ensureProfileFromUser(session.user);
+    const retry = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+    profile = retry.data;
+  }
 
   if (!profile) return null;
 
