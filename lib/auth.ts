@@ -27,7 +27,7 @@ function domainFromEmail(email: string) {
 
 async function ensureCompanyForEmail(email: string) {
   const domain = domainFromEmail(email);
-  await supabase.from("companies").upsert(
+  const { error } = await supabase.from("companies").upsert(
     {
       id: domain,
       name: domain,
@@ -35,6 +35,9 @@ async function ensureCompanyForEmail(email: string) {
     },
     { onConflict: "id" },
   );
+  if (error && !error.message.toLowerCase().includes("relation \"companies\" does not exist")) {
+    throw new Error(`Company setup failed: ${error.message}`);
+  }
   return domain;
 }
 
@@ -52,19 +55,45 @@ async function ensureProfileFromUser(user: {
       ? user.user_metadata.name.trim()
       : email.split("@")[0];
 
-  await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      email,
-      name,
-      plan: "Starter",
-      is_owner: false,
-      is_approved: false,
-      role: "csm",
-      company_id: companyId,
-    },
-    { onConflict: "id" },
-  );
+  const richPayload = {
+    id: user.id,
+    email,
+    name,
+    plan: "Starter",
+    is_owner: false,
+    is_approved: false,
+    role: "csm",
+    company_id: companyId,
+  };
+
+  let upsertResult = await supabase.from("profiles").upsert(richPayload, { onConflict: "id" });
+
+  if (upsertResult.error) {
+    const message = upsertResult.error.message.toLowerCase();
+    const isSchemaDrift =
+      message.includes("column") ||
+      message.includes("company_id") ||
+      message.includes("role") ||
+      message.includes("relation \"companies\" does not exist");
+
+    if (!isSchemaDrift) {
+      throw new Error(`Profile setup failed: ${upsertResult.error.message}`);
+    }
+
+    upsertResult = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        email,
+        name,
+        is_owner: false,
+      },
+      { onConflict: "id" },
+    );
+
+    if (upsertResult.error) {
+      throw new Error(`Profile setup failed: ${upsertResult.error.message}`);
+    }
+  }
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -98,7 +127,15 @@ export async function signUp(
     .single();
 
   if (!profile) {
-    profile = await ensureProfileFromUser(data.session.user);
+    try {
+      profile = await ensureProfileFromUser(data.session.user);
+    } catch (setupError) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: setupError instanceof Error ? setupError.message : "Profile setup failed. Please try again.",
+      };
+    }
   }
 
   if (!profile) {
@@ -137,7 +174,15 @@ export async function login(
     .single();
 
   if (!profile) {
-    profile = await ensureProfileFromUser(session.user);
+    try {
+      profile = await ensureProfileFromUser(session.user);
+    } catch (setupError) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: setupError instanceof Error ? setupError.message : "Profile setup failed. Please try again.",
+      };
+    }
   }
 
   if (!profile) {

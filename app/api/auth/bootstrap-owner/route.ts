@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     const companyId = domainFromEmail(OWNER_EMAIL);
 
-    await supabaseAdmin.from("companies").upsert(
+    const companyResult = await supabaseAdmin.from("companies").upsert(
       {
         id: companyId,
         name: companyId,
@@ -125,7 +125,17 @@ export async function POST(request: NextRequest) {
       { onConflict: "id" },
     );
 
-    const profileResult = await supabaseAdmin.from("profiles").upsert(
+    if (
+      companyResult.error &&
+      !companyResult.error.message.toLowerCase().includes('relation "companies" does not exist')
+    ) {
+      return NextResponse.json(
+        { ok: false, error: `Company setup failed: ${companyResult.error.message}` },
+        { status: 500 },
+      );
+    }
+
+    let profileResult = await supabaseAdmin.from("profiles").upsert(
       {
         id: userId,
         email: OWNER_EMAIL,
@@ -138,6 +148,32 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: "id" },
     );
+
+    if (profileResult.error) {
+      const message = profileResult.error.message.toLowerCase();
+      const isSchemaDrift =
+        message.includes("column") ||
+        message.includes("company_id") ||
+        message.includes("role") ||
+        message.includes('relation "companies" does not exist');
+
+      if (!isSchemaDrift) {
+        return NextResponse.json(
+          { ok: false, error: `Profile setup failed: ${profileResult.error.message}` },
+          { status: 500 },
+        );
+      }
+
+      profileResult = await supabaseAdmin.from("profiles").upsert(
+        {
+          id: userId,
+          email: OWNER_EMAIL,
+          name,
+          is_owner: true,
+        },
+        { onConflict: "id" },
+      );
+    }
 
     if (profileResult.error) {
       return NextResponse.json(
