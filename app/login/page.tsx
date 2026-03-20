@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [signupError, setSignupError] = useState("");
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [signupPendingApproval, setSignupPendingApproval] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +51,7 @@ export default function LoginPage() {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setSignupError("");
+    setSignupPendingApproval(false);
     if (!signupName || !signupEmail || !signupPassword || !signupConfirm) {
       setSignupError("Please fill in all fields.");
       return;
@@ -68,6 +70,17 @@ export default function LoginPage() {
     if (!result.ok) {
       setSignupError(result.error ?? "Sign up failed.");
       return;
+    }
+    if (result.requiresEmailConfirmation) {
+      setSignupError("Email confirmation is still enabled in Supabase. Turn it off in Supabase Auth settings to use direct signup without email verification.");
+      return;
+    }
+    if (result.isOwner) {
+      router.push("/admin");
+      return;
+    }
+    if (result.pendingApproval) {
+      setSignupPendingApproval(true);
     }
     setSignupSuccess(true);
   }
@@ -94,7 +107,7 @@ export default function LoginPage() {
               Sign in
             </button>
             <button
-              onClick={() => { setTab("signup"); setSignupError(""); setSignupSuccess(false); }}
+              onClick={() => { setTab("signup"); setSignupError(""); setSignupSuccess(false); setSignupPendingApproval(false); }}
               className={`flex-1 px-5 py-4 text-sm font-semibold transition ${tab === "signup" ? "border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400" : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"}`}
             >
               Create account
@@ -161,7 +174,11 @@ export default function LoginPage() {
                   <div>
                     <div className="text-sm font-semibold text-gray-900 dark:text-white">Request submitted!</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-white/60">
-                      Your account for <span className="font-semibold">{signupEmail}</span> is pending approval. You&apos;ll be notified once approved.
+                      {signupPendingApproval ? (
+                        <>Your account for <span className="font-semibold">{signupEmail}</span> is ready and now waiting for admin approval.</>
+                      ) : (
+                        <>Your account for <span className="font-semibold">{signupEmail}</span> has been created successfully.</>
+                      )}
                     </div>
                   </div>
                   <button

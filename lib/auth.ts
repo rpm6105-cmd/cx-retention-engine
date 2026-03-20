@@ -25,13 +25,38 @@ export async function signUp(
   name: string,
   email: string,
   password: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.auth.signUp({
+): Promise<{ ok: boolean; error?: string; requiresEmailConfirmation?: boolean; pendingApproval?: boolean; isOwner?: boolean }> {
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { name } },
   });
   if (error) return { ok: false, error: error.message };
+
+  if (!data.session) {
+    return { ok: true, requiresEmailConfirmation: true };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_approved, is_owner")
+    .eq("id", data.session.user.id)
+    .single();
+
+  if (!profile) {
+    await supabase.auth.signOut();
+    return { ok: false, error: "Profile not found. Please contact support." };
+  }
+
+  if (profile.is_owner) {
+    return { ok: true, isOwner: true };
+  }
+
+  if (!profile.is_approved) {
+    await supabase.auth.signOut();
+    return { ok: true, pendingApproval: true };
+  }
+
   return { ok: true };
 }
 
