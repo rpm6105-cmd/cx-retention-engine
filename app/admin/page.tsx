@@ -38,6 +38,8 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState("");
+  const [assignmentError, setAssignmentError] = useState("");
+  const [assignmentSuccess, setAssignmentSuccess] = useState("");
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [assigningUser, setAssigningUser] = useState<Profile | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<Plan>("Starter");
@@ -163,12 +165,24 @@ export default function AdminPage() {
 
   async function handleAssignmentSave() {
     if (!profile || !selectedCustomerId || !selectedAssigneeId) return;
+    setAssignmentError("");
+    setAssignmentSuccess("");
     const nextAssignments = {
       ...assignments,
       [selectedCustomerId]: selectedAssigneeId,
     };
-    await saveAssignments(profile, nextAssignments);
-    setAssignments(nextAssignments);
+    try {
+      await saveAssignments(profile, nextAssignments);
+      setAssignments(nextAssignments);
+      await refreshWorkspace();
+      const customer = customers.find((item) => item.id === selectedCustomerId);
+      const assignee = users.find((user) => user.id === selectedAssigneeId);
+      setAssignmentSuccess(
+        `${customer?.name ?? "Customer"} assigned to ${assignee?.name ?? assignee?.email ?? "selected CSM"}.`,
+      );
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : "Assignment could not be saved.");
+    }
   }
 
   async function handleInvite(event: React.FormEvent) {
@@ -323,6 +337,16 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
+              {assignmentError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700">
+                  {assignmentError}
+                </div>
+              )}
+              {assignmentSuccess && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+                  {assignmentSuccess}
+                </div>
+              )}
               <div>
                 <Button variant="primary" onClick={handleAssignmentSave} disabled={!selectedCustomerId || !selectedAssigneeId}>Save assignment</Button>
               </div>

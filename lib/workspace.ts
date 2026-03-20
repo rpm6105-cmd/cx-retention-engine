@@ -328,7 +328,7 @@ export async function saveAssignments(profile: WorkspaceProfile, assignments: As
   const result = await supabase.from("assignments").upsert(rows, { onConflict: "company_id,customer_id" });
   if (!result.error) return result;
 
-  return supabase
+  const fallback = await supabase
     .from("assignments")
     .upsert(
       Object.entries(assignments).map(([customer_id, csm_name]) => ({
@@ -338,6 +338,12 @@ export async function saveAssignments(profile: WorkspaceProfile, assignments: As
       })),
       { onConflict: "user_id,customer_id" },
     );
+
+  if (fallback.error) {
+    throw new Error(fallback.error.message);
+  }
+
+  return fallback;
 }
 
 export async function loadWorkspaceCustomers(profile: WorkspaceProfile): Promise<CustomerRow[]> {
