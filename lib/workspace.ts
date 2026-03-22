@@ -695,10 +695,8 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
   });
   if (uploadError) {
     console.error("Upload history recording failed:", uploadError);
->>>>>>> a07e70d (Fix CSV assignment sync and hide pricing details)
   }
 
-  await supabase.from("dataset_uploads").insert({ company_id: profile.company_id, file_name: fileName, uploaded_by: profile.id, uploaded_at: new Date().toISOString(), row_count: normalizedCustomers.length, status: "completed" });
   return { ok: true as const, customers: normalizedCustomers };
 }
 
