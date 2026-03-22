@@ -242,6 +242,7 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
   const companyId = (profile.company_id as string | null) || domainFromEmail(String(profile.email || session.user.email || ""));
   
   if (!profile.company_id && session.user.id) {
+    // Synchronously try to update the profile so the next fetch works immediately
     const { error: updateError } = await supabase.from("profiles").update({ company_id: companyId }).eq("id", session.user.id);
     if (updateError) console.error("Identity bootstrap failed:", updateError);
   }
@@ -325,20 +326,55 @@ export async function loadAssignments(profile: WorkspaceProfile): Promise<Assign
 }
 
 export async function saveAssignments(profile: WorkspaceProfile, assignments: AssignmentMap) {
-  const rows = Object.entries(assignments).map(([customer_id, assigned_profile_id]) => ({
-    company_id: profile.company_id,
-    customer_id,
-    assigned_profile_id,
-    assigned_by: profile.id,
-  }));
+  const assignmentEntries = Object.entries(assignments).filter(([, assigned_profile_id]) => Boolean(assigned_profile_id));
+  const assigneeIds = assignmentEntries.map(([, assigned_profile_id]) => assigned_profile_id);
+  if (assignmentEntries.length === 0) {
+    return supabase.from("assignments").delete().eq("company_id", profile.company_id ?? "").eq("assigned_by", profile.id);
+  }
+
+  const { data: companyUsers } = await supabase
+    .from("profiles")
+    .select("id,name,email")
+    .in("id", assigneeIds);
+
+  const userById = new Map(
+    ((companyUsers ?? []) as Array<{ id: string; name: string | null; email: string | null }>).map((user) => [user.id, user]),
+  );
+
+  const rows = assignmentEntries.map(([customer_id, assigned_profile_id]) => {
+    const matchedUser = userById.get(assigned_profile_id);
+    return {
+      company_id: profile.company_id,
+      customer_id,
+      assigned_profile_id,
+      assigned_csm_email: matchedUser?.email ?? null,
+      assigned_by: profile.id,
+    };
+  });
 
   const result = await supabase.from("assignments").upsert(rows, { onConflict: "company_id,customer_id" });
-  if (!result.error) return result;
+  if (!result.error) {
+    await Promise.all(
+      assignmentEntries.map(async ([customer_id, assigned_profile_id]) => {
+        const matchedUser = userById.get(assigned_profile_id);
+        await supabase
+          .from("customers")
+          .update({
+            assigned_csm_name: matchedUser?.name ?? matchedUser?.email ?? null,
+            assigned_csm_email: matchedUser?.email ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", customer_id)
+          .eq("company_id", profile.company_id ?? "");
+      }),
+    );
+    return result;
+  }
 
   const fallback = await supabase
     .from("assignments")
     .upsert(
-      Object.entries(assignments).map(([customer_id, csm_name]) => ({
+      assignmentEntries.map(([customer_id, csm_name]) => ({
         user_id: profile.id,
         customer_id,
         csm_name,
@@ -552,15 +588,24 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
     health_category: customer.healthCategory,
     churn_risk: customer.churnRisk,
     assigned_csm_name: customer.assignedCsmName,
+    assigned_csm_email: customer.assignedCsmEmail,
     plan_value: customer.plan_value,
     usage_trend: customer.usageTrend ?? [],
   }));
 
+  // --- NEW: Clear old company data for a clean sync ---
   if (profile.company_id) {
-    const { error: deleteError } = await supabase.from("customers").delete().eq("company_id", profile.company_id);
+    const { error: deleteError } = await supabase
+      .from("customers")
+      .delete()
+      .eq("company_id", profile.company_id);
     if (deleteError) console.error("Could not clear old customers:", deleteError);
+    
+    // Also clear old assignments to keep them in sync with the new master list
     await supabase.from("assignments").delete().eq("company_id", profile.company_id);
+    await supabase.from("assignments").delete().eq("user_id", profile.id);
   } else {
+    // Fallback for personal workspace
     await supabase.from("customers").delete().eq("user_id", profile.id);
     await supabase.from("assignments").delete().eq("user_id", profile.id);
   }
@@ -571,7 +616,7 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
       payload.map((row) => ({
         id: row.id,
         user_id: profile.id,
-        company_id: profile.company_id,
+        company_id: profile.company_id, // Ensure company_id is present even in fallback
         name: row.name,
         plan: row.plan,
         mrr: row.mrr,
@@ -586,22 +631,71 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
     if (fallback.error) return { ok: false as const, error: fallback.error.message };
   }
 
+  // --- NEW: Sync Assignments (Added to CX Engine) ---
   try {
-    const { data: teamProfiles } = await supabase.from("profiles").select("id, name, email").eq("company_id", profile.company_id);
+    const { data: teamProfiles } = await supabase
+      .from("profiles")
+      .select("id, name, email")
+      .eq("company_id", profile.company_id);
+
     if (teamProfiles && teamProfiles.length > 0) {
-      const assignmentRows: any[] = [];
+      const assignmentRows: Array<{
+        company_id: string | null;
+        customer_id: string;
+        assigned_profile_id: string;
+        assigned_csm_email: string | null;
+        assigned_by: string;
+      }> = [];
       normalizedCustomers.forEach((customer) => {
         const ownerQuery = (customer.assignedCsmName || "").trim().toLowerCase();
         if (!ownerQuery) return;
-        const matchedProfile = teamProfiles.find((p) => p.name?.toLowerCase() === ownerQuery || p.email?.toLowerCase() === ownerQuery || p.name?.toLowerCase().includes(ownerQuery) || ownerQuery.includes(p.name?.toLowerCase() || "___"));
-        if (matchedProfile) assignmentRows.push({ company_id: profile.company_id, customer_id: customer.id, assigned_profile_id: matchedProfile.id, assigned_by: profile.id });
+        
+        // Flexible matching: check name, email, or if query is part of the name/email
+        const matchedProfile = teamProfiles.find(
+          (p) => 
+            p.name?.toLowerCase() === ownerQuery || 
+            p.email?.toLowerCase() === ownerQuery ||
+            p.name?.toLowerCase().includes(ownerQuery) ||
+            ownerQuery.includes(p.name?.toLowerCase() || "___")
+        );
+
+        if (matchedProfile) {
+          customer.assignedCsmEmail = matchedProfile.email ?? null;
+          assignmentRows.push({
+            company_id: profile.company_id,
+            customer_id: customer.id,
+            assigned_profile_id: matchedProfile.id,
+            assigned_csm_email: matchedProfile.email ?? null,
+            assigned_by: profile.id,
+          });
+        }
       });
+
       if (assignmentRows.length > 0) {
-        await supabase.from("assignments").upsert(assignmentRows, { onConflict: "company_id,customer_id" });
+        console.log(`Syncing ${assignmentRows.length} assignments...`);
+        const { error: assignError } = await supabase.from("assignments").upsert(assignmentRows, { 
+          onConflict: "company_id,customer_id" 
+        });
+        if (assignError) console.error("Assignment upsert error:", assignError);
       }
     }
   } catch (err) {
     console.error("Assignment sync failed:", err);
+    // Non-blocking error for main import
+  }
+  // --- END Sync Assignments ---
+
+  const { error: uploadError } = await supabase.from("dataset_uploads").insert({
+    company_id: profile.company_id,
+    file_name: fileName,
+    uploaded_by: profile.id,
+    uploaded_at: new Date().toISOString(),
+    row_count: normalizedCustomers.length,
+    status: "completed",
+  });
+  if (uploadError) {
+    console.error("Upload history recording failed:", uploadError);
+>>>>>>> a07e70d (Fix CSV assignment sync and hide pricing details)
   }
 
   await supabase.from("dataset_uploads").insert({ company_id: profile.company_id, file_name: fileName, uploaded_by: profile.id, uploaded_at: new Date().toISOString(), row_count: normalizedCustomers.length, status: "completed" });

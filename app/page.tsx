@@ -1,16 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
 export default function LandingPage() {
-  const [billingAnnual, setBillingAnnual] = useState(false);
-
   const plans = [
     {
       name: "Starter",
-      monthlyPrice: 49,
-      annualPrice: 39,
       description: "Perfect for small CS teams getting started.",
       features: [
         "Up to 50 customers",
@@ -24,8 +18,6 @@ export default function LandingPage() {
     },
     {
       name: "Pro",
-      monthlyPrice: 149,
-      annualPrice: 119,
       description: "For growing teams that need deeper insights.",
       features: [
         "Up to 500 customers",
@@ -39,8 +31,6 @@ export default function LandingPage() {
     },
     {
       name: "Business",
-      monthlyPrice: 399,
-      annualPrice: 319,
       description: "Enterprise-grade retention at scale.",
       features: [
         "Unlimited customers",
@@ -178,13 +168,6 @@ export default function LandingPage() {
             <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Pricing</div>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-4xl">Simple, transparent pricing</h2>
             <p className="mt-4 text-base text-gray-600 dark:text-white/60">Start free. Scale as your team grows.</p>
-            <div className="mt-6 inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-white/5">
-              <button onClick={() => setBillingAnnual(false)} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${!billingAnnual ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white"}`}>Monthly</button>
-              <button onClick={() => setBillingAnnual(true)} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${billingAnnual ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white"}`}>
-                Annual
-                <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">-20%</span>
-              </button>
-            </div>
           </div>
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
             {plans.map((plan) => (
@@ -196,8 +179,7 @@ export default function LandingPage() {
                 )}
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{plan.name}</div>
                 <div className="mt-3 flex items-end gap-1">
-                  <span className="text-3xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">${billingAnnual ? plan.annualPrice : plan.monthlyPrice}</span>
-                  <span className="mb-1 text-sm text-gray-500 dark:text-white/60">/mo</span>
+                  <span className="text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">Coming Soon</span>
                 </div>
                 <div className="mt-1 text-xs text-gray-500 dark:text-white/60">{plan.description}</div>
                 <Link href="/login" className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-4 ${plan.tone === "primary" ? "bg-indigo-600 text-white shadow-indigo-600/20 hover:bg-indigo-700 focus:ring-indigo-600/20" : "border border-gray-200 bg-white text-gray-900 hover:bg-gray-50 focus:ring-indigo-600/15 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"}`}>
