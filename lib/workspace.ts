@@ -239,6 +239,13 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
   const profile = (expanded.data ?? fallback?.data) as Record<string, unknown> | null;
   if (!profile) return null;
 
+  const companyId = (profile.company_id as string | null) || domainFromEmail(String(profile.email || session.user.email || ""));
+  
+  if (!profile.company_id && session.user.id) {
+    const { error: updateError } = await supabase.from("profiles").update({ company_id: companyId }).eq("id", session.user.id);
+    if (updateError) console.error("Identity bootstrap failed:", updateError);
+  }
+
   return {
     id: String(profile.id),
     name: String(profile.name ?? session.user.user_metadata?.name ?? "User"),
@@ -247,7 +254,7 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
     is_owner: Boolean(profile.is_owner),
     is_approved: Boolean(profile.is_approved),
     created_at: String(profile.created_at ?? new Date().toISOString()),
-    company_id: (profile.company_id as string | null) ?? domainFromEmail(String(profile.email ?? session.user.email ?? "")),
+    company_id: companyId,
     role: ((profile.role as WorkspaceRole | undefined) ?? (profile.is_owner ? "admin" : "csm")) as WorkspaceRole,
   };
 }
@@ -354,7 +361,7 @@ export async function loadWorkspaceCustomers(profile: WorkspaceProfile): Promise
     .order("account_name", { ascending: true });
 
   let rows = (!shared.error && shared.data ? shared.data : []) as Record<string, unknown>[];
-  if (rows.length === 0) {
+  if (rows.length === 0 && !profile.company_id) {
     const legacy = await supabase
       .from("customers")
       .select("*")
@@ -549,12 +556,22 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
     usage_trend: customer.usageTrend ?? [],
   }));
 
+  if (profile.company_id) {
+    const { error: deleteError } = await supabase.from("customers").delete().eq("company_id", profile.company_id);
+    if (deleteError) console.error("Could not clear old customers:", deleteError);
+    await supabase.from("assignments").delete().eq("company_id", profile.company_id);
+  } else {
+    await supabase.from("customers").delete().eq("user_id", profile.id);
+    await supabase.from("assignments").delete().eq("user_id", profile.id);
+  }
+
   const upsert = await supabase.from("customers").upsert(payload, { onConflict: "id" });
   if (upsert.error) {
     const fallback = await supabase.from("customers").upsert(
       payload.map((row) => ({
         id: row.id,
         user_id: profile.id,
+        company_id: profile.company_id,
         name: row.name,
         plan: row.plan,
         mrr: row.mrr,
@@ -566,21 +583,28 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
       })),
       { onConflict: "id" },
     );
-
-    if (fallback.error) {
-      return { ok: false as const, error: fallback.error.message };
-    }
+    if (fallback.error) return { ok: false as const, error: fallback.error.message };
   }
 
-  await supabase.from("dataset_uploads").insert({
-    company_id: profile.company_id,
-    file_name: fileName,
-    uploaded_by: profile.id,
-    uploaded_at: new Date().toISOString(),
-    row_count: normalizedCustomers.length,
-    status: "completed",
-  });
+  try {
+    const { data: teamProfiles } = await supabase.from("profiles").select("id, name, email").eq("company_id", profile.company_id);
+    if (teamProfiles && teamProfiles.length > 0) {
+      const assignmentRows: any[] = [];
+      normalizedCustomers.forEach((customer) => {
+        const ownerQuery = (customer.assignedCsmName || "").trim().toLowerCase();
+        if (!ownerQuery) return;
+        const matchedProfile = teamProfiles.find((p) => p.name?.toLowerCase() === ownerQuery || p.email?.toLowerCase() === ownerQuery || p.name?.toLowerCase().includes(ownerQuery) || ownerQuery.includes(p.name?.toLowerCase() || "___"));
+        if (matchedProfile) assignmentRows.push({ company_id: profile.company_id, customer_id: customer.id, assigned_profile_id: matchedProfile.id, assigned_by: profile.id });
+      });
+      if (assignmentRows.length > 0) {
+        await supabase.from("assignments").upsert(assignmentRows, { onConflict: "company_id,customer_id" });
+      }
+    }
+  } catch (err) {
+    console.error("Assignment sync failed:", err);
+  }
 
+  await supabase.from("dataset_uploads").insert({ company_id: profile.company_id, file_name: fileName, uploaded_by: profile.id, uploaded_at: new Date().toISOString(), row_count: normalizedCustomers.length, status: "completed" });
   return { ok: true as const, customers: normalizedCustomers };
 }
 
@@ -589,6 +613,5 @@ export function buildExecutiveSummary(customers: CustomerRow[]) {
   const nearRenewal = customers.filter((customer) => (customer.renewalDays ?? 999) <= 90);
   const expansion = customers.filter((customer) => expansionScore(customer) >= 75);
   const arrExposure = highRisk.reduce((sum, customer) => sum + (customer.arr ?? customer.mrr * 12), 0);
-
-  return `${highRisk.length} accounts show elevated churn risk with ARR exposure of $${arrExposure.toLocaleString()}. ${nearRenewal.length} renewals are due inside 90 days, and ${expansion.length} accounts show clear expansion potential. Focus first on low-health accounts with near-term renewals and rising support demand.`;
+  return `${highRisk.length} accounts show elevated churn risk with ARR exposure of $${arrExposure.toLocaleString()}. ${nearRenewal.length} renewals are due inside 90 days, and ${expansion.length} accounts show clear expansion potential.`;
 }
