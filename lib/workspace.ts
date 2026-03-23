@@ -88,7 +88,12 @@ function planFromRaw(value: string | undefined): CustomerPlan {
 }
 
 function safeNumber(value: unknown, fallback = 0) {
-  const num = Number(value);
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+
+  // Clean string: remove $, commas, percent signs, and whitespace
+  const clean = String(value).replace(/[$,%\s]/g, "");
+  const num = Number(clean);
   return Number.isFinite(num) ? num : fallback;
 }
 
@@ -617,12 +622,29 @@ export async function importCustomersFromCsv(profile: WorkspaceProfile, text: st
         id: row.id,
         user_id: profile.id,
         company_id: profile.company_id, // Ensure company_id is present even in fallback
+        customer_id: row.customer_id,
+        account_name: row.account_name,
         name: row.name,
+        plan_type: row.plan_type,
         plan: row.plan,
+        arr: row.arr,
         mrr: row.mrr,
+        active_users: row.active_users,
+        monthly_logins: row.monthly_logins,
         last_activity: row.last_activity,
+        feature_usage_score: row.feature_usage_score,
         logins_last_30_days: row.logins_last_30_days,
+        support_tickets_last_30_days: row.support_tickets_last_30_days,
         support_tickets: row.support_tickets,
+        csat: row.csat,
+        nps: row.nps,
+        last_login_days_ago: row.last_login_days_ago,
+        renewal_date: row.renewal_date,
+        health_score: row.health_score,
+        health_category: row.health_category,
+        churn_risk: row.churn_risk,
+        assigned_csm_name: row.assigned_csm_name,
+        assigned_csm_email: row.assigned_csm_email,
         plan_value: row.plan_value,
         usage_trend: row.usage_trend,
       })),

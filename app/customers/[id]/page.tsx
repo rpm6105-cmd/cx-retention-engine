@@ -42,6 +42,7 @@ export default function CustomerDetailPage() {
     lastActivity: string;
     logins_last_30_days: number;
     support_tickets: number;
+    support_tickets_last_30_days?: number;
     plan_value: number;
     usageTrend: number[];
     tasks: {
@@ -53,6 +54,7 @@ export default function CustomerDetailPage() {
   };
 
   const arr = customer.arr ?? customer.mrr * 12;
+  const supportTickets30 = customer.support_tickets_last_30_days ?? customer.support_tickets;
   const healthScore = Math.round(calculateHealth(customer));
   const risk = riskFlag(healthScore);
   const riskLevel: "High" | "Medium" | "Low" = risk.startsWith("High")
@@ -63,7 +65,7 @@ export default function CustomerDetailPage() {
 
   const breakdown = {
     usage: Math.round((clamp(customer.logins_last_30_days * 2, 0, 40) / 40) * 100),
-    support: Math.round((clamp(customer.support_tickets * 5, 0, 30) / 30) * 100),
+    support: Math.round((clamp(supportTickets30 * 5, 0, 30) / 30) * 100),
     engagement: Math.round((clamp(customer.plan_value / 50, 0, 30) / 30) * 100),
   };
 
@@ -74,7 +76,7 @@ export default function CustomerDetailPage() {
   const keyIssues = (() => {
     const issues: string[] = [];
     if (customer.logins_last_30_days < 10) issues.push("Low usage");
-    if (customer.support_tickets >= 5) issues.push("High support tickets");
+    if (supportTickets30 >= 5) issues.push("High support tickets");
     if (Number.isFinite(daysSinceActivity) && daysSinceActivity >= 7)
       issues.push("Recent inactivity");
     return issues;
@@ -259,11 +261,12 @@ export default function CustomerDetailPage() {
                               `Summary for ${customer.name}`,
                               `- Health score: ${healthScore}`,
                               `- Risk level: ${risk}`,
+                              `- ARR: $${arr.toLocaleString()}`,
                               `- Key issues: ${issues}`,
                               "",
                               "Key drivers",
                               `- Usage (logins last 30d): ${customer.logins_last_30_days}`,
-                              `- Support tickets: ${customer.support_tickets}`,
+                              `- Support tickets (30d): ${supportTickets30}`,
                               `- Inactivity: ${inactivity} since last activity`,
                             ].join("\n"));
                           }}
@@ -273,10 +276,11 @@ export default function CustomerDetailPage() {
                           onClick={() => {
                             const actions: string[] = [];
                             if (riskLevel === "High") actions.push("Schedule urgent check-in");
-                            if (customer.support_tickets >= 5) actions.push("Review support issues");
+                            if (supportTickets30 >= 5) actions.push("Review support issues and escalation themes");
                             if (customer.logins_last_30_days < 10) actions.push("Run adoption recovery plan");
                             if (Number.isFinite(daysSinceActivity) && daysSinceActivity >= 7) actions.push("Re-engage champion / stakeholders");
-                            if (actions.length === 0) actions.push("Upsell / expansion opportunity");
+                            if (arr >= 50000 && riskLevel !== "High") actions.push("Review expansion opportunity with the account team");
+                            if (actions.length === 0) actions.push("Maintain success cadence and validate business outcomes");
                             else if (riskLevel === "Medium") actions.push("Increase engagement (lightweight success plan)");
                             setCopilotOutput([`Next actions (${risk})`, ...actions.map((a) => `- ${a}`)].join("\n"));
                           }}
@@ -286,7 +290,7 @@ export default function CustomerDetailPage() {
                           onClick={() => {
                             const status = riskLevel === "High" ? "we're concerned about recent signals" : riskLevel === "Medium" ? "we've noticed a few signals worth addressing" : "things are looking strong";
                             const suggested = riskLevel === "High" ? "schedule an urgent check-in and review open support issues" : riskLevel === "Medium" ? "set up a quick check-in to increase engagement" : "discuss an expansion opportunity based on your usage";
-                            const issuesLine = keyIssues.length > 0 ? `Noted: ${keyIssues.join(", ")} (logins: ${customer.logins_last_30_days}, tickets: ${customer.support_tickets}).` : `Signals: logins last 30d = ${customer.logins_last_30_days}, tickets = ${customer.support_tickets}.`;
+                            const issuesLine = keyIssues.length > 0 ? `Noted: ${keyIssues.join(", ")} (ARR: $${arr.toLocaleString()}, logins: ${customer.logins_last_30_days}, tickets: ${supportTickets30}).` : `Signals: ARR = $${arr.toLocaleString()}, logins last 30d = ${customer.logins_last_30_days}, tickets = ${supportTickets30}.`;
                             setCopilotOutput([
                               `Subject: Quick check-in with ${customer.name}`,
                               "",
